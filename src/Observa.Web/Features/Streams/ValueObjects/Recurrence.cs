@@ -8,11 +8,12 @@ using Observa.Features.Streams.Errors;
 namespace Observa.Features.Streams.ValueObjects;
 
 [ValueObject]
+[GenerateSerializer]
 public sealed partial record Recurrence : ValueObject
 {
-    public Cadence Cadence { get; init; }
-    public int Anchor { get; init; }
-    public Variability Variability { get; init; }
+    [Id(0)] public Cadence Cadence { get; init; }
+    [Id(1)] public int Anchor { get; init; }
+    [Id(2)] public Variability Variability { get; init; }
 
     private Recurrence() { }
 

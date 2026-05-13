@@ -7,9 +7,10 @@ using Observa.Features.Streams.Errors;
 namespace Observa.Features.Streams.ValueObjects;
 
 [ValueObject]
+[GenerateSerializer]
 public sealed partial record Money : ValueObject
 {
-    public decimal Amount { get; init; }
+    [Id(0)] public decimal Amount { get; init; }
 
     private Money() { }
 

@@ -1,5 +1,7 @@
 using Crucible.Chains.DependencyInjection;
 using Observa.Components;
+using Observa.Features.Streams.Aggregates;
+using Observa.Features.Streams.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +26,8 @@ builder.UseOrleans(silo =>
 });
 
 builder.Services.AddCrucible();
+builder.Services.AddStreamAggregate();
+builder.Services.AddScoped<StreamService>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
