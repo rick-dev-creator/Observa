@@ -61,7 +61,7 @@ public partial class Stream : AggregateRoot<StreamId>
         return evt;
     }
 
-    [Step(Order = 2, AllowedAfter = new[] { nameof(Register) })]
+    [Step(Order = 2, AllowedAfter = new[] { nameof(Register), nameof(Resume) })]
     public Result<FlowEventIngested> IngestEvent(IngestEventDto dto)
     {
         if (Status != StreamStatus.Active)
@@ -81,5 +81,53 @@ public partial class Stream : AggregateRoot<StreamId>
         var domainEvt = new FlowEventIngested(Id, eventId, amount, dto.OccurredAt);
         Raise(domainEvt);
         return domainEvt;
+    }
+
+    [Step(Order = 2, AllowedAfter = new[] { nameof(Register) })]
+    public Result<StreamPaused> Pause()
+    {
+        if (Status != StreamStatus.Active)
+            return new BusinessRuleError("STREAM_NOT_ACTIVE_FOR_PAUSE", $"Only Active streams can be paused; current status is {Status}.");
+
+        Status = StreamStatus.Paused;
+        var evt = new StreamPaused(Id);
+        Raise(evt);
+        return evt;
+    }
+
+    [Step(Order = 3, AllowedAfter = new[] { nameof(Pause) })]
+    public Result<StreamResumed> Resume()
+    {
+        if (Status != StreamStatus.Paused)
+            return new BusinessRuleError("STREAM_NOT_PAUSED_FOR_RESUME", $"Only Paused streams can be resumed; current status is {Status}.");
+
+        Status = StreamStatus.Active;
+        var evt = new StreamResumed(Id);
+        Raise(evt);
+        return evt;
+    }
+
+    [Step(Order = 4, AllowedAfter = new[] { nameof(Register), nameof(Pause) })]
+    public Result<StreamStopped> Stop()
+    {
+        if (Status is StreamStatus.Stopped or StreamStatus.Deleted)
+            return new BusinessRuleError("STREAM_ALREADY_TERMINAL", $"Stream is already in terminal state {Status}; cannot stop.");
+
+        Status = StreamStatus.Stopped;
+        var evt = new StreamStopped(Id);
+        Raise(evt);
+        return evt;
+    }
+
+    [Step(Order = 4, AllowedAfter = new[] { nameof(Register), nameof(Pause) })]
+    public Result<StreamDeleted> Delete()
+    {
+        if (Status is StreamStatus.Stopped or StreamStatus.Deleted)
+            return new BusinessRuleError("STREAM_ALREADY_TERMINAL", $"Stream is already in terminal state {Status}; cannot delete.");
+
+        Status = StreamStatus.Deleted;
+        var evt = new StreamDeleted(Id);
+        Raise(evt);
+        return evt;
     }
 }

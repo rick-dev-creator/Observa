@@ -165,4 +165,213 @@ public sealed class StreamAggregateTests
 
         stream.Events.Select(e => e.Id).Distinct().Should().HaveCount(3);
     }
+
+    [Fact]
+    public void Pause_OnActiveStream_TransitionsToPausedAndRaisesEvent()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+
+        var result = stream.Pause();
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Status.Should().Be(StreamStatus.Paused);
+        stream.PendingEvents.OfType<StreamPaused>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Pause_OnPausedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Pause();
+
+        var result = stream.Pause();
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE_FOR_PAUSE");
+    }
+
+    [Fact]
+    public void Resume_OnPausedStream_TransitionsBackToActive()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Pause();
+
+        var result = stream.Resume();
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Status.Should().Be(StreamStatus.Active);
+        stream.PendingEvents.OfType<StreamResumed>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Resume_OnActiveStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+
+        var result = stream.Resume();
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_PAUSED_FOR_RESUME");
+    }
+
+    [Fact]
+    public void IngestEvent_AfterResume_Succeeds()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Pause();
+        stream.Resume();
+
+        var result = stream.IngestEvent(ValidIngestDto(150m));
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Events.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void IngestEvent_OnPausedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Pause();
+
+        var result = stream.IngestEvent(ValidIngestDto(150m));
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE");
+    }
+
+    [Fact]
+    public void Stop_OnActiveStream_TransitionsToStopped()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+
+        var result = stream.Stop();
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Status.Should().Be(StreamStatus.Stopped);
+        stream.PendingEvents.OfType<StreamStopped>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Stop_OnPausedStream_TransitionsToStopped()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Pause();
+
+        var result = stream.Stop();
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Status.Should().Be(StreamStatus.Stopped);
+    }
+
+    [Fact]
+    public void Stop_OnStoppedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Stop();
+
+        var result = stream.Stop();
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_ALREADY_TERMINAL");
+    }
+
+    [Fact]
+    public void Resume_OnStoppedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Stop();
+
+        var result = stream.Resume();
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_PAUSED_FOR_RESUME");
+    }
+
+    [Fact]
+    public void IngestEvent_OnStoppedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Stop();
+
+        var result = stream.IngestEvent(ValidIngestDto(50m));
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE");
+    }
+
+    [Fact]
+    public void Delete_OnActiveStream_TransitionsToDeleted()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+
+        var result = stream.Delete();
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Status.Should().Be(StreamStatus.Deleted);
+        stream.PendingEvents.OfType<StreamDeleted>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Delete_OnPausedStream_TransitionsToDeleted()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Pause();
+
+        var result = stream.Delete();
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Status.Should().Be(StreamStatus.Deleted);
+    }
+
+    [Fact]
+    public void Delete_OnStoppedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Stop();
+
+        var result = stream.Delete();
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_ALREADY_TERMINAL");
+    }
+
+    [Fact]
+    public void Delete_OnDeletedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Delete();
+
+        var result = stream.Delete();
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_ALREADY_TERMINAL");
+    }
+
+    [Fact]
+    public void IngestEvent_OnDeletedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+        stream.Delete();
+
+        var result = stream.IngestEvent(ValidIngestDto(75m));
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE");
+    }
 }

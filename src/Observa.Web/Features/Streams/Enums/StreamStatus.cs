@@ -4,5 +4,6 @@ public enum StreamStatus
 {
     Active,
     Paused,
-    Archived,
+    Stopped,
+    Deleted,
 }
