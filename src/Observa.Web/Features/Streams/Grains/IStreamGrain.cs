@@ -7,5 +7,4 @@ public interface IStreamGrain : IGrainWithGuidKey
     Task LogActivityAsync(ActivityLogEntry entry);
     Task EnsureConnectorPollReminderAsync(TimeSpan pollInterval);
     Task RemoveConnectorPollReminderAsync();
-    Task UpdateLastSyncAsync(DateTimeOffset lastSync);
 }

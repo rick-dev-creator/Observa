@@ -142,4 +142,22 @@ public partial class Stream : AggregateRoot<StreamId>
         Raise(evt);
         return evt;
     }
+
+    [Step(Order = 2, AllowedAfter = new[] { nameof(Register), nameof(Resume) })]
+    public Result<ConnectorPolled> RecordPoll(DateTimeOffset at)
+    {
+        if (Status != StreamStatus.Active)
+            return new BusinessRuleError(DomainErrors.Stream.NotActive, $"Stream must be Active to record a poll; current status is {Status}.");
+        if (Binding is null)
+            return new BusinessRuleError(DomainErrors.Stream.NoBindingForPoll, "Cannot record poll on a stream without a connector binding.");
+
+        var rebound = ConnectorBinding.Create(Binding.ConnectorId, Binding.ExternalRef, at);
+        if (rebound.IsFailure)
+            return Result<ConnectorPolled>.Failure(rebound.Errors);
+        Binding = rebound.Value;
+
+        var evt = new ConnectorPolled(Id, at);
+        Raise(evt);
+        return evt;
+    }
 }

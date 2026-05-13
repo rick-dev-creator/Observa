@@ -83,4 +83,17 @@ public sealed class StreamService(IGrainFactory grains, IServiceProvider sp)
                 success: ev => Result<StreamDeleted>.Success(ev),
                 failure: errs => Result<StreamDeleted>.Failure(errs));
     }
+
+    public async Task<Result<ConnectorPolled>> RecordPollAsync(StreamId id, DateTimeOffset at, CancellationToken ct)
+    {
+        var snapshot = await grains.GetGrain<IStreamGrain>(id.Value).GetAsync();
+        var snap = snapshot.AsCrucibleSnapshot();
+        return await StreamsApi.ReconstructAtRegister(snap)
+            .RecordPoll(at)
+            .DispatchEvents()
+            .ExecuteAsync(sp, ct)
+            .Match(
+                success: ev => Result<ConnectorPolled>.Success(ev),
+                failure: errs => Result<ConnectorPolled>.Failure(errs));
+    }
 }

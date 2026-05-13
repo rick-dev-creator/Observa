@@ -45,13 +45,6 @@ public sealed class StreamGrain(
             await this.UnregisterReminder(existing);
     }
 
-    public async Task UpdateLastSyncAsync(DateTimeOffset lastSync)
-    {
-        if (state.State.Binding is null) return;
-        state.State.Binding.LastSync = lastSync;
-        await state.WriteStateAsync();
-    }
-
     public async Task ReceiveReminder(string reminderName, TickStatus status)
     {
         if (reminderName != ConnectorPollReminderName) return;

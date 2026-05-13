@@ -10,6 +10,7 @@ public static class DomainErrors
         public const string NotActiveForPause = "STREAM_NOT_ACTIVE_FOR_PAUSE";
         public const string NotPausedForResume = "STREAM_NOT_PAUSED_FOR_RESUME";
         public const string AlreadyTerminal = "STREAM_ALREADY_TERMINAL";
+        public const string NoBindingForPoll = "STREAM_NO_BINDING_FOR_POLL";
     }
 
     public static class FlowEvent

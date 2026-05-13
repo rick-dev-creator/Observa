@@ -1,5 +1,7 @@
 using Crucible.Domain.Errors;
 using FluentAssertions;
+using Observa.Connectors.Abstractions;
+using Observa.Features.Connectors.Domain;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Errors;
 using Observa.Features.Streams.Dtos;
@@ -16,11 +18,17 @@ public sealed class StreamAggregateTests
         string name = "Salary",
         string category = "Work",
         Direction direction = Direction.Income,
-        decimal? expectedAmount = 8000m) =>
-        new(name, category, direction, Schedule: null, ExpectedAmount: expectedAmount);
+        decimal? expectedAmount = 8000m,
+        ConnectorBinding? binding = null) =>
+        new(name, category, direction, Schedule: null, ExpectedAmount: expectedAmount, Binding: binding);
 
     private static IngestEventDto ValidIngestDto(decimal amount = 100m) =>
         new(DateTimeOffset.UtcNow, amount, IngestionSource.Manual);
+
+    private static ConnectorBinding TestBinding(DateTimeOffset? lastSync = null) =>
+        ConnectorBinding.Create(new ConnectorId("test"), "ext-ref-1", lastSync).Match(
+            b => b,
+            _ => throw new InvalidOperationException("test ConnectorBinding setup invalid"));
 
     [Fact]
     public void Register_WithValidDto_SetsFieldsAndActiveStatus()
@@ -417,5 +425,101 @@ public sealed class StreamAggregateTests
 
         result.IsFailure.Should().BeTrue();
         result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActive);
+    }
+
+    [Fact]
+    public void RecordPoll_OnActiveStreamWithBinding_UpdatesLastSyncAndRaisesEvent()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: TestBinding()));
+        var at = DateTimeOffset.Parse("2026-05-14T10:00:00Z");
+
+        var result = stream.RecordPoll(at);
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Binding!.LastSync.Should().Be(at);
+        stream.Binding.ConnectorId.Value.Should().Be("test");
+        stream.Binding.ExternalRef.Should().Be("ext-ref-1");
+        stream.PendingEvents.OfType<ConnectorPolled>().Should().ContainSingle()
+            .Which.PolledAt.Should().Be(at);
+    }
+
+    [Fact]
+    public void RecordPoll_OverwritesPreviousLastSync()
+    {
+        var earlier = DateTimeOffset.Parse("2026-05-01T00:00:00Z");
+        var later = DateTimeOffset.Parse("2026-05-14T10:00:00Z");
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: TestBinding(lastSync: earlier)));
+
+        stream.RecordPoll(later);
+
+        stream.Binding!.LastSync.Should().Be(later);
+    }
+
+    [Fact]
+    public void RecordPoll_OnStreamWithoutBinding_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: null));
+
+        var result = stream.RecordPoll(DateTimeOffset.UtcNow);
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NoBindingForPoll);
+    }
+
+    [Fact]
+    public void RecordPoll_OnPausedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: TestBinding()));
+        stream.Pause();
+
+        var result = stream.RecordPoll(DateTimeOffset.UtcNow);
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActive);
+    }
+
+    [Fact]
+    public void RecordPoll_OnStoppedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: TestBinding()));
+        stream.Stop();
+
+        var result = stream.RecordPoll(DateTimeOffset.UtcNow);
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActive);
+    }
+
+    [Fact]
+    public void RecordPoll_OnDeletedStream_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: TestBinding()));
+        stream.Delete();
+
+        var result = stream.RecordPoll(DateTimeOffset.UtcNow);
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActive);
+    }
+
+    [Fact]
+    public void RecordPoll_AfterResume_Succeeds()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: TestBinding()));
+        stream.Pause();
+        stream.Resume();
+        var at = DateTimeOffset.UtcNow;
+
+        var result = stream.RecordPoll(at);
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Binding!.LastSync.Should().Be(at);
     }
 }

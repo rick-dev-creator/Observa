@@ -107,7 +107,12 @@ public sealed class ConnectorPollOrchestrator(
                 string.Join(",", result.Errors.Select(e => e.ErrorCode)));
         }
 
-        await grain.UpdateLastSyncAsync(DateTimeOffset.UtcNow);
+        var pollResult = await service.RecordPollAsync(StreamId.From(streamId), DateTimeOffset.UtcNow, ct);
+        if (pollResult.IsFailure)
+        {
+            logger.LogWarning("Stream {StreamId} RecordPoll failed: {Errors}",
+                streamId, string.Join(",", pollResult.Errors.Select(e => e.ErrorCode)));
+        }
 
         await grain.LogActivityAsync(new ActivityLogEntry
         {
