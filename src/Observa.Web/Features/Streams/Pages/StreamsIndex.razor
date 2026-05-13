@@ -1,0 +1,111 @@
+@page "/streams"
+@rendermode InteractiveServer
+@inject StreamQueryService Query
+
+<PageTitle>Streams · Observa</PageTitle>
+
+<header class="mb-6 flex items-end justify-between">
+    <div>
+        <h1 class="text-2xl font-semibold tracking-tight">Streams</h1>
+        <p class="text-sm text-zinc-500">All registered streams and their connector status.</p>
+    </div>
+    <a href="streams/new"
+       class="px-4 py-2 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white">
+        + Register stream
+    </a>
+</header>
+
+<label class="flex items-center gap-2 text-sm text-zinc-400 mb-4">
+    <input type="checkbox" class="h-4 w-4 accent-zinc-100" @bind="_includeTerminal" @bind:after="LoadAsync" />
+    Include stopped / deleted
+</label>
+
+@if (_rows is null)
+{
+    <p class="text-zinc-500 text-sm">Loading…</p>
+}
+else if (_rows.Count == 0)
+{
+    <p class="text-zinc-500 text-sm">No streams.</p>
+}
+else
+{
+    <div class="border border-zinc-800 rounded overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-zinc-900 text-zinc-400 uppercase text-xs tracking-wide">
+                <tr>
+                    <th class="text-left px-4 py-2 font-medium">Name</th>
+                    <th class="text-left px-4 py-2 font-medium">Direction</th>
+                    <th class="text-left px-4 py-2 font-medium">Status</th>
+                    <th class="text-left px-4 py-2 font-medium">Connector</th>
+                    <th class="text-left px-4 py-2 font-medium">Last poll</th>
+                    <th class="text-left px-4 py-2 font-medium">Next poll</th>
+                    <th class="text-right px-4 py-2 font-medium">Expected</th>
+                    <th class="text-right px-4 py-2 font-medium">Last event</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800">
+                @foreach (var row in _rows)
+                {
+                    <tr class="hover:bg-zinc-900/50">
+                        <td class="px-4 py-2">
+                            <a href="streams/@row.Id" class="text-zinc-100 hover:text-white font-medium">@row.Name</a>
+                            <div class="text-xs text-zinc-500">@row.Category</div>
+                        </td>
+                        <td class="px-4 py-2 text-zinc-300">@row.Direction</td>
+                        <td class="px-4 py-2"><StatusBadge Status="row.Status" /></td>
+                        <td class="px-4 py-2 text-zinc-300">@(row.ConnectorDisplayName ?? "—")</td>
+                        <td class="px-4 py-2 @(row.LastPollFailed ? "text-amber-400" : "text-zinc-400")">
+                            @FormatRelative(row.LastConnectorPollAt) @(row.LastPollFailed ? "⚠" : "")
+                        </td>
+                        <td class="px-4 py-2 text-zinc-400">@FormatRelative(row.NextPollEstimate, prefix: "in ")</td>
+                        <td class="px-4 py-2 text-right tabular-nums text-zinc-300">
+                            @(row.ExpectedAmount is null ? "—" : $"${row.ExpectedAmount:N2}")
+                        </td>
+                        <td class="px-4 py-2 text-right tabular-nums">
+                            @if (row.LastEventAmount is not null)
+                            {
+                                <MoneyDisplay Amount="row.LastEventAmount.Value" Direction="row.Direction" />
+                                <div class="text-xs text-zinc-500">@FormatRelative(row.LastEventAt)</div>
+                            }
+                            else
+                            {
+                                <span class="text-zinc-600">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<StreamOperationsView>? _rows;
+    private bool _includeTerminal;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _rows = null;
+        _rows = await Query.ListOperationsAsync(_includeTerminal, CancellationToken.None);
+    }
+
+    private static string FormatRelative(DateTimeOffset? when, string prefix = "")
+    {
+        if (when is null) return "—";
+        var delta = when.Value - DateTimeOffset.UtcNow;
+        var abs = delta.Duration();
+        var unit = abs switch
+        {
+            { TotalDays: >= 1 } => $"{(int)abs.TotalDays}d",
+            { TotalHours: >= 1 } => $"{(int)abs.TotalHours}h",
+            { TotalMinutes: >= 1 } => $"{(int)abs.TotalMinutes}m",
+            _ => $"{(int)abs.TotalSeconds}s",
+        };
+        if (string.IsNullOrEmpty(prefix))
+            return delta.TotalSeconds < 0 ? $"{unit} ago" : $"in {unit}";
+        return $"{prefix}{unit}";
+    }
+}

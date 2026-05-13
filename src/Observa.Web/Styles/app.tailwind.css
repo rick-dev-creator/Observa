@@ -1,3 +1,4 @@
 @import "tailwindcss";
 
 @source "../Components/**/*.{razor,html}";
+@source "../Features/**/*.{razor,html}";

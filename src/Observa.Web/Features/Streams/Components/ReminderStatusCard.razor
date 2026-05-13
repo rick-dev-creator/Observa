@@ -1,0 +1,60 @@
+@if (Status is null)
+{
+    <div class="border border-zinc-800 rounded p-4 text-sm text-zinc-500">
+        No reminder. This stream has no connector binding or its connector does not poll.
+    </div>
+}
+else
+{
+    <div class="border border-zinc-800 rounded p-4 space-y-2 text-sm">
+        <div class="grid grid-cols-[140px_1fr] gap-y-1 gap-x-4">
+            <span class="text-zinc-500">Connector</span>
+            <span class="text-zinc-200">@Status.ConnectorDisplayName <span class="text-zinc-600 text-xs">(@Status.ConnectorId)</span></span>
+
+            <span class="text-zinc-500">Poll interval</span>
+            <span class="text-zinc-200 tabular-nums">@FormatInterval(Status.PollInterval)</span>
+
+            <span class="text-zinc-500">Last fired</span>
+            <span class="text-zinc-200 tabular-nums">
+                @(Status.LastFiredAt is null ? "never" : $"{Status.LastFiredAt:yyyy-MM-dd HH:mm:ss} UTC ({Relative(Status.LastFiredAt)})")
+            </span>
+
+            <span class="text-zinc-500">Next fire</span>
+            <span class="text-zinc-200 tabular-nums">
+                @(Status.NextFireEstimate is null ? "pending first fire" : $"{Status.NextFireEstimate:yyyy-MM-dd HH:mm:ss} UTC ({Relative(Status.NextFireEstimate)})")
+            </span>
+
+            <span class="text-zinc-500">Last sync</span>
+            <span class="text-zinc-200 tabular-nums">
+                @(Status.LastSyncAt is null ? "never" : $"{Status.LastSyncAt:yyyy-MM-dd HH:mm:ss} UTC ({Relative(Status.LastSyncAt)})")
+            </span>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public ReminderStatusView? Status { get; set; }
+
+    private static string FormatInterval(TimeSpan ts) => ts switch
+    {
+        { TotalDays: >= 1 } => $"{ts.TotalDays:0.#} day(s)",
+        { TotalHours: >= 1 } => $"{ts.TotalHours:0.#} hour(s)",
+        { TotalMinutes: >= 1 } => $"{ts.TotalMinutes:0.#} minute(s)",
+        _ => $"{ts.TotalSeconds:0.#}s",
+    };
+
+    private static string Relative(DateTimeOffset? when)
+    {
+        if (when is null) return "—";
+        var delta = when.Value - DateTimeOffset.UtcNow;
+        var abs = delta.Duration();
+        var unit = abs switch
+        {
+            { TotalDays: >= 1 } => $"{(int)abs.TotalDays}d",
+            { TotalHours: >= 1 } => $"{(int)abs.TotalHours}h",
+            { TotalMinutes: >= 1 } => $"{(int)abs.TotalMinutes}m",
+            _ => $"{(int)abs.TotalSeconds}s",
+        };
+        return delta.TotalSeconds < 0 ? $"{unit} ago" : $"in {unit}";
+    }
+}

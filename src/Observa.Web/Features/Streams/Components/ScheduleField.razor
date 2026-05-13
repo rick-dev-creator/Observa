@@ -1,0 +1,64 @@
+<div class="space-y-2">
+    <label class="flex items-center gap-2 text-sm text-zinc-300">
+        <input type="checkbox" class="h-4 w-4 accent-zinc-100" @bind="HasSchedule" @bind:after="EmitChange" />
+        Has schedule (auto-emission cadence)
+    </label>
+
+    @if (HasSchedule)
+    {
+        <div class="grid grid-cols-3 gap-2 pl-6">
+            <div>
+                <label class="block text-xs text-zinc-500 mb-1">Cadence</label>
+                <select class="@FieldCss" @bind="Cadence" @bind:after="EmitChange">
+                    @foreach (var c in Enum.GetValues<Cadence>())
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-zinc-500 mb-1">Anchor</label>
+                <input type="number" min="1" max="31" class="@FieldCss" @bind="Anchor" @bind:after="EmitChange" />
+                <p class="text-xs text-zinc-600 mt-1">@AnchorHint</p>
+            </div>
+            <div>
+                <label class="block text-xs text-zinc-500 mb-1">Variability</label>
+                <select class="@FieldCss" @bind="Variability" @bind:after="EmitChange">
+                    @foreach (var v in Enum.GetValues<Variability>())
+                    {
+                        <option value="@v">@v</option>
+                    }
+                </select>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private const string FieldCss =
+        "w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-500";
+
+    [Parameter] public bool HasSchedule { get; set; }
+    [Parameter] public EventCallback<bool> HasScheduleChanged { get; set; }
+    [Parameter] public Cadence Cadence { get; set; } = Cadence.Monthly;
+    [Parameter] public EventCallback<Cadence> CadenceChanged { get; set; }
+    [Parameter] public int Anchor { get; set; } = 1;
+    [Parameter] public EventCallback<int> AnchorChanged { get; set; }
+    [Parameter] public Variability Variability { get; set; } = Variability.Fixed;
+    [Parameter] public EventCallback<Variability> VariabilityChanged { get; set; }
+
+    private string AnchorHint => Cadence switch
+    {
+        Cadence.Monthly => "Day of month (1-31)",
+        Cadence.Weekly or Cadence.Biweekly => "ISO day (1=Mon … 7=Sun)",
+        _ => "Not used",
+    };
+
+    private async Task EmitChange()
+    {
+        await HasScheduleChanged.InvokeAsync(HasSchedule);
+        await CadenceChanged.InvokeAsync(Cadence);
+        await AnchorChanged.InvokeAsync(Anchor);
+        await VariabilityChanged.InvokeAsync(Variability);
+    }
+}

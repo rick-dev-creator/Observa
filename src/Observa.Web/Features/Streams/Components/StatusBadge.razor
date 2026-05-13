@@ -1,0 +1,14 @@
+<span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded @ColorClass">@Status</span>
+
+@code {
+    [Parameter, EditorRequired] public StreamStatus Status { get; set; }
+
+    private string ColorClass => Status switch
+    {
+        StreamStatus.Active => "bg-emerald-900/40 text-emerald-300 border border-emerald-800",
+        StreamStatus.Paused => "bg-zinc-800 text-zinc-400 border border-zinc-700",
+        StreamStatus.Stopped => "bg-zinc-900 text-zinc-500 border border-zinc-700 line-through",
+        StreamStatus.Deleted => "bg-zinc-900 text-zinc-600 border border-zinc-800",
+        _ => "bg-zinc-800 text-zinc-400",
+    };
+}

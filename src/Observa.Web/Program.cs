@@ -5,6 +5,7 @@ using Observa.Components;
 using Observa.Connectors.Abstractions;
 using Observa.Connectors.Patreon;
 using Observa.Features.Connectors.Catalog;
+using Observa.Features.Seed;
 using Observa.Features.Connectors.Manual;
 using Observa.Features.Connectors.Orchestration;
 using Observa.Features.Connectors.Recurring;
@@ -47,6 +48,11 @@ builder.Services.AddSingleton<IConnector, RecurringConnector>();
 builder.Services.AddPatreonConnectors(builder.Configuration);
 builder.Services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 builder.Services.AddSingleton<ConnectorPollOrchestrator>();
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddHostedService<StreamSeedService>();
+}
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

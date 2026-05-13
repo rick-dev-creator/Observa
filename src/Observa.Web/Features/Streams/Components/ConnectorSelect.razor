@@ -1,0 +1,22 @@
+@inject ConnectorCatalogService Catalog
+
+<select class="@CssClass" @bind="SelectedId" @bind:after="OnChanged">
+    <option value="">— None (manual entry only) —</option>
+    @foreach (var c in _items)
+    {
+        <option value="@c.Id">@c.DisplayName</option>
+    }
+</select>
+
+@code {
+    private IReadOnlyList<ConnectorCatalogItemView> _items = [];
+
+    [Parameter] public string? SelectedId { get; set; }
+    [Parameter] public EventCallback<string?> SelectedIdChanged { get; set; }
+    [Parameter] public string CssClass { get; set; } =
+        "w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-500";
+
+    protected override void OnInitialized() => _items = Catalog.List();
+
+    private Task OnChanged() => SelectedIdChanged.InvokeAsync(string.IsNullOrEmpty(SelectedId) ? null : SelectedId);
+}

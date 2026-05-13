@@ -1,0 +1,60 @@
+@if (Entries.Count == 0)
+{
+    <p class="text-zinc-500 text-sm">No activity yet.</p>
+}
+else
+{
+    <div class="border border-zinc-800 rounded overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-zinc-900 text-zinc-400 uppercase text-xs tracking-wide">
+                <tr>
+                    <th class="text-left px-3 py-2 font-medium w-44">Timestamp (UTC)</th>
+                    <th class="text-left px-3 py-2 font-medium w-32">Kind</th>
+                    <th class="text-left px-3 py-2 font-medium">Message</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800">
+                @foreach (var e in Entries)
+                {
+                    <tr class="hover:bg-zinc-900/50 align-top">
+                        <td class="px-3 py-1.5 text-zinc-400 tabular-nums whitespace-nowrap">@e.Timestamp.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td class="px-3 py-1.5">
+                            <span class="@KindClass(e.Kind) text-xs font-medium">@e.Kind</span>
+                        </td>
+                        <td class="px-3 py-1.5 text-zinc-300">
+                            @e.Message
+                            @if (e.Details is { Count: > 0 })
+                            {
+                                <details class="mt-0.5">
+                                    <summary class="text-xs text-zinc-500 cursor-pointer hover:text-zinc-300">details</summary>
+                                    <ul class="mt-1 text-xs text-zinc-500 font-mono pl-3">
+                                        @foreach (var kv in e.Details)
+                                        {
+                                            <li><span class="text-zinc-600">@kv.Key:</span> @kv.Value</li>
+                                        }
+                                    </ul>
+                                </details>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ActivityLogEntryView> Entries { get; set; } = [];
+
+    private static string KindClass(string kind) => kind switch
+    {
+        "PollFailed" => "text-rose-400",
+        "PollCompleted" => "text-emerald-400",
+        "PollStarted" or "ReminderFired" => "text-sky-400",
+        "EventIngested" => "text-violet-400",
+        "Registered" => "text-zinc-200",
+        "Paused" or "Resumed" => "text-amber-400",
+        "Stopped" or "Deleted" => "text-zinc-500",
+        _ => "text-zinc-400",
+    };
+}

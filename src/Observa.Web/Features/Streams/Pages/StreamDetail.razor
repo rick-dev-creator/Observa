@@ -1,0 +1,152 @@
+@page "/streams/{Id:guid}"
+@rendermode InteractiveServer
+@inject StreamQueryService Query
+@inject StreamService Streams
+@inject NavigationManager Nav
+
+<PageTitle>@(_view?.Name ?? "Stream") · Observa</PageTitle>
+
+@if (_view is null)
+{
+    <p class="text-zinc-500 text-sm">Loading…</p>
+}
+else
+{
+    <header class="mb-6 flex items-start justify-between gap-6">
+        <div>
+            <div class="flex items-center gap-3 mb-1">
+                <h1 class="text-2xl font-semibold tracking-tight">@_view.Name</h1>
+                <StatusBadge Status="_view.Status" />
+            </div>
+            <p class="text-sm text-zinc-500">
+                @_view.Direction · @_view.Category
+                @if (_view.ConnectorDisplayName is not null)
+                {
+                    <span> · </span><span class="text-zinc-400">@_view.ConnectorDisplayName</span>
+                    @if (!string.IsNullOrEmpty(_view.ConnectorExternalRef))
+                    {
+                        <span class="text-zinc-600"> (@_view.ConnectorExternalRef)</span>
+                    }
+                }
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2 justify-end">
+            @if (_view.Status == StreamStatus.Active)
+            {
+                <button class="@SecondaryBtn" @onclick="() => ActAsync(Streams.PauseAsync)">Pause</button>
+                <button class="@SecondaryBtn" @onclick="() => ActAsync(Streams.StopAsync)">Stop</button>
+                <button class="@DangerBtn" @onclick="() => ActAsync(Streams.DeleteAsync)">Delete</button>
+            }
+            else if (_view.Status == StreamStatus.Paused)
+            {
+                <button class="@PrimaryBtn" @onclick="() => ActAsync(Streams.ResumeAsync)">Resume</button>
+                <button class="@SecondaryBtn" @onclick="() => ActAsync(Streams.StopAsync)">Stop</button>
+                <button class="@DangerBtn" @onclick="() => ActAsync(Streams.DeleteAsync)">Delete</button>
+            }
+        </div>
+    </header>
+
+    <section class="mb-8 grid grid-cols-3 gap-4 text-sm">
+        <div class="border border-zinc-800 rounded p-3">
+            <p class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Expected</p>
+            <p class="tabular-nums text-zinc-100">@(_view.ExpectedAmount is null ? "—" : $"${_view.ExpectedAmount:N2}")</p>
+        </div>
+        <div class="border border-zinc-800 rounded p-3">
+            <p class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Schedule</p>
+            <p class="text-zinc-300">@(_view.ScheduleSummary ?? "—")</p>
+        </div>
+        <div class="border border-zinc-800 rounded p-3">
+            <p class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Events</p>
+            <p class="tabular-nums text-zinc-100">@(_events?.Count.ToString() ?? "…")</p>
+        </div>
+    </section>
+
+    @if (_view.Status is StreamStatus.Active or StreamStatus.Paused)
+    {
+        <section class="mb-8">
+            <details class="border border-zinc-800 rounded">
+                <summary class="px-4 py-2 text-sm text-zinc-300 cursor-pointer hover:bg-zinc-900/50">+ Ingest manual event</summary>
+                <div class="px-4 py-3 border-t border-zinc-800 grid grid-cols-[1fr_auto] gap-2">
+                    <input type="number" step="0.01" min="0.01" placeholder="Amount (USD)"
+                           class="bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-500"
+                           @bind="_ingestAmount" />
+                    <button class="@PrimaryBtn" @onclick="IngestAsync" disabled="@_ingesting">
+                        @(_ingesting ? "Ingesting…" : "Ingest")
+                    </button>
+                    @if (_ingestError is not null)
+                    {
+                        <p class="col-span-2 text-rose-400 text-sm">@_ingestError</p>
+                    }
+                </div>
+            </details>
+        </section>
+    }
+
+    <section class="mb-8">
+        <h2 class="text-sm font-medium text-zinc-300 uppercase tracking-wide mb-3">Reminder</h2>
+        <ReminderStatusCard Status="_view.ReminderStatus" />
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-sm font-medium text-zinc-300 uppercase tracking-wide mb-3">Events</h2>
+        @if (_events is null) { <p class="text-zinc-500 text-sm">Loading…</p> }
+        else { <EventList Events="_events" Direction="_view.Direction" /> }
+    </section>
+
+    <section class="mb-8">
+        <h2 class="text-sm font-medium text-zinc-300 uppercase tracking-wide mb-3">Activity log</h2>
+        <ActivityLogTable Entries="_view.ActivityLog" />
+    </section>
+}
+
+@code {
+    private const string PrimaryBtn = "px-3 py-1.5 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white disabled:opacity-50";
+    private const string SecondaryBtn = "px-3 py-1.5 border border-zinc-700 text-zinc-300 rounded text-sm hover:bg-zinc-800";
+    private const string DangerBtn = "px-3 py-1.5 border border-rose-800 text-rose-300 rounded text-sm hover:bg-rose-900/30";
+
+    [Parameter] public Guid Id { get; set; }
+
+    private StreamActivityView? _view;
+    private IReadOnlyList<FlowEventView>? _events;
+    private decimal? _ingestAmount;
+    private bool _ingesting;
+    private string? _ingestError;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _view = await Query.GetActivityAsync(StreamId.From(Id), CancellationToken.None);
+        _events = await Query.ListEventsAsync(StreamId.From(Id), CancellationToken.None);
+    }
+
+    private async Task ActAsync<T>(Func<StreamId, CancellationToken, Task<T>> action)
+    {
+        await action(StreamId.From(Id), CancellationToken.None);
+        await LoadAsync();
+    }
+
+    private async Task IngestAsync()
+    {
+        _ingestError = null;
+        if (_ingestAmount is null or <= 0)
+        {
+            _ingestError = "Amount must be positive.";
+            return;
+        }
+
+        _ingesting = true;
+        var dto = new IngestEventDto(DateTimeOffset.UtcNow, _ingestAmount.Value, IngestionSource.Manual);
+        var result = await Streams.IngestEventAsync(StreamId.From(Id), dto, CancellationToken.None);
+        _ingesting = false;
+
+        if (result.IsFailure)
+        {
+            _ingestError = string.Join("; ", result.Errors.Select(e => e.ErrorCode));
+            return;
+        }
+
+        _ingestAmount = null;
+        await LoadAsync();
+    }
+}

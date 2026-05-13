@@ -1,0 +1,140 @@
+@page "/streams/new"
+@rendermode InteractiveServer
+@inject StreamService Streams
+@inject NavigationManager Nav
+
+<PageTitle>Register stream · Observa</PageTitle>
+
+<header class="mb-6">
+    <h1 class="text-2xl font-semibold tracking-tight">Register stream</h1>
+    <p class="text-sm text-zinc-500">Create an income or outcome stream. Connector binding is optional.</p>
+</header>
+
+<EditForm Model="_form" OnValidSubmit="SubmitAsync" FormName="register-stream" class="space-y-5 max-w-2xl">
+    <DataAnnotationsValidator />
+
+    <div class="grid grid-cols-2 gap-4">
+        <div>
+            <label class="block text-xs text-zinc-500 mb-1">Name</label>
+            <InputText @bind-Value="_form.Name" class="@FieldCss" placeholder="Salary, Patreon, Rent…" />
+        </div>
+        <div>
+            <label class="block text-xs text-zinc-500 mb-1">Category</label>
+            <InputText @bind-Value="_form.Category" class="@FieldCss" placeholder="Work, Content, Housing…" />
+        </div>
+    </div>
+
+    <div>
+        <label class="block text-xs text-zinc-500 mb-2">Direction</label>
+        <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-2">
+                <InputRadioGroup @bind-Value="_form.Direction" Name="direction">
+                    <InputRadio Value="Direction.Income" class="accent-emerald-400" /> <span>Income</span>
+                </InputRadioGroup>
+            </label>
+            <label class="flex items-center gap-2">
+                <InputRadioGroup @bind-Value="_form.Direction" Name="direction2">
+                    <InputRadio Value="Direction.Outcome" class="accent-rose-400" /> <span>Outcome</span>
+                </InputRadioGroup>
+            </label>
+        </div>
+    </div>
+
+    <div>
+        <label class="block text-xs text-zinc-500 mb-1">Expected amount (USD, optional)</label>
+        <InputNumber @bind-Value="_form.ExpectedAmount" class="@FieldCss" placeholder="8000.00" />
+    </div>
+
+    <ScheduleField
+        @bind-HasSchedule="_form.HasSchedule"
+        @bind-Cadence="_form.Cadence"
+        @bind-Anchor="_form.Anchor"
+        @bind-Variability="_form.Variability" />
+
+    <div class="border-t border-zinc-800 pt-4">
+        <label class="block text-xs text-zinc-500 mb-1">Connector (data source)</label>
+        <ConnectorSelect @bind-SelectedId="_form.ConnectorId" />
+        @if (!string.IsNullOrEmpty(_form.ConnectorId))
+        {
+            <div class="mt-3">
+                <label class="block text-xs text-zinc-500 mb-1">External reference</label>
+                <InputText @bind-Value="_form.ExternalRef" class="@FieldCss"
+                           placeholder="campaign id, account label, etc." />
+            </div>
+        }
+    </div>
+
+    @if (_errors is { Count: > 0 })
+    {
+        <div class="border border-rose-800 bg-rose-900/30 text-rose-200 px-3 py-2 rounded text-sm">
+            <ul class="list-disc list-inside">
+                @foreach (var e in _errors) { <li><code class="text-xs">@e.Code</code> — @e.Message</li> }
+            </ul>
+        </div>
+    }
+
+    <div class="flex gap-3 pt-2">
+        <button type="submit" disabled="@_submitting"
+                class="px-4 py-2 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white disabled:opacity-50">
+            @(_submitting ? "Registering…" : "Register stream")
+        </button>
+        <a href="streams" class="px-4 py-2 text-zinc-400 hover:text-white text-sm self-center">Cancel</a>
+    </div>
+</EditForm>
+
+@code {
+    private const string FieldCss =
+        "w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-500";
+
+    private readonly RegisterStreamForm _form = new();
+    private bool _submitting;
+    private List<(string Code, string Message)>? _errors;
+
+    private async Task SubmitAsync()
+    {
+        _submitting = true;
+        _errors = null;
+
+        Recurrence? schedule = null;
+        if (_form.HasSchedule)
+        {
+            var r = Recurrence.Create(_form.Cadence, _form.Anchor, _form.Variability);
+            if (r.IsFailure) { _errors = r.Errors.Select(e => (e.ErrorCode, e.ErrorDescription)).ToList(); _submitting = false; return; }
+            schedule = r.Value;
+        }
+
+        ConnectorBinding? binding = null;
+        if (!string.IsNullOrEmpty(_form.ConnectorId))
+        {
+            var b = ConnectorBinding.Create(new ConnectorId(_form.ConnectorId), _form.ExternalRef ?? "", null);
+            if (b.IsFailure) { _errors = b.Errors.Select(e => (e.ErrorCode, e.ErrorDescription)).ToList(); _submitting = false; return; }
+            binding = b.Value;
+        }
+
+        var dto = new RegisterStreamDto(_form.Name, _form.Category, _form.Direction, schedule, _form.ExpectedAmount, binding);
+        var result = await Streams.RegisterAsync(dto, CancellationToken.None);
+
+        if (result.IsFailure)
+        {
+            _errors = result.Errors.Select(e => (e.ErrorCode, e.ErrorDescription)).ToList();
+            _submitting = false;
+            return;
+        }
+
+        Nav.NavigateTo("streams");
+    }
+
+    private sealed class RegisterStreamForm
+    {
+        public string Name { get; set; } = "";
+        public string Category { get; set; } = "";
+        public Direction Direction { get; set; } = Direction.Income;
+        public decimal? ExpectedAmount { get; set; }
+        public bool HasSchedule { get; set; }
+        public Cadence Cadence { get; set; } = Cadence.Monthly;
+        public int Anchor { get; set; } = 1;
+        public Variability Variability { get; set; } = Variability.Fixed;
+        public string? ConnectorId { get; set; }
+        public string? ExternalRef { get; set; }
+    }
+}

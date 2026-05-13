@@ -34,10 +34,27 @@ public sealed class StreamQueryService(IGrainFactory grains, IConnectorRegistry 
         var state = await grains.GetGrain<IStreamGrain>(id.Value).GetAsync();
         if (state.Id == Guid.Empty) return null;
 
+        var scheduleSummary = state.Schedule is { } s
+            ? $"{s.Cadence} · anchor {s.Anchor} · {s.Variability}"
+            : null;
+
+        string? connectorDisplay = null;
+        if (state.Binding is { } bind)
+        {
+            var c = connectors.Find(new ConnectorId(bind.ConnectorId));
+            connectorDisplay = c?.Metadata.DisplayName ?? bind.ConnectorId;
+        }
+
         return new StreamActivityView(
             Id: state.Id,
             Name: state.Name,
+            Category: state.Category,
+            Direction: state.Direction,
             Status: state.Status,
+            ExpectedAmount: state.ExpectedAmount?.Amount,
+            ScheduleSummary: scheduleSummary,
+            ConnectorDisplayName: connectorDisplay,
+            ConnectorExternalRef: state.Binding?.ExternalRef,
             ReminderStatus: MapReminderStatus(state),
             ActivityLog: state.ActivityLog
                 .OrderByDescending(e => e.Timestamp)

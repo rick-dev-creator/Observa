@@ -1,0 +1,13 @@
+@inject NavigationManager Nav
+
+<NavLink href="@Href" Match="@Match"
+         class="block px-4 py-2 text-zinc-300 hover:bg-zinc-800 hover:text-white border-l-2 border-transparent"
+         ActiveClass="bg-zinc-800 text-white border-l-2 !border-zinc-100">
+    @Label
+</NavLink>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public NavLinkMatch Match { get; set; } = NavLinkMatch.Prefix;
+}
