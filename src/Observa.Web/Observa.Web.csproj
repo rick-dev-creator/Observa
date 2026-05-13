@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>preview</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <IsAspireSharedProject>false</IsAspireSharedProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Observa.ServiceDefaults\Observa.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\crucible\src\Crucible.Domain\Crucible.Domain.csproj" />
+    <ProjectReference Include="..\..\..\crucible\src\Crucible.Chains\Crucible.Chains.csproj" />
+    <ProjectReference Include="..\..\..\crucible\src\Crucible.Generators\Crucible.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="9.2.1" />
+    <PackageReference Include="Npgsql" Version="9.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="package.json;package-lock.json;node_modules/**;Styles/**" />
+    <None Include="package.json" />
+    <None Include="Styles/app.tailwind.css" />
+  </ItemGroup>
+
+  <Target Name="TailwindInstall" BeforeTargets="TailwindBuild" Inputs="package.json" Outputs="node_modules/.package-lock.json">
+    <Exec Command="npm install" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <Target Name="TailwindBuild" BeforeTargets="AssignTargetPaths" Inputs="Styles/app.tailwind.css;Components/**/*.razor" Outputs="wwwroot/app.css">
+    <Exec Command="npm run css:build" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+</Project>

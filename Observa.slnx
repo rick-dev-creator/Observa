@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Observa.AppHost/Observa.AppHost.csproj" />
+    <Project Path="src/Observa.ServiceDefaults/Observa.ServiceDefaults.csproj" />
+    <Project Path="src/Observa.Web/Observa.Web.csproj" />
+  </Folder>
+</Solution>

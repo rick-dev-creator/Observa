@@ -1,0 +1,12 @@
+{
+  "name": "observa.web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "css:build": "tailwindcss -i ./Styles/app.tailwind.css -o ./wwwroot/app.css --minify",
+    "css:watch": "tailwindcss -i ./Styles/app.tailwind.css -o ./wwwroot/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0"
+  }
+}
