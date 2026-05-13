@@ -17,4 +17,8 @@
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="sql\*.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -1,4 +1,6 @@
+using System.Data.Common;
 using Crucible.Chains.DependencyInjection;
+using Npgsql;
 using Observa.Components;
 using Observa.Connectors.Abstractions;
 using Observa.Connectors.Patreon;
@@ -9,6 +11,8 @@ using Observa.Features.Connectors.Recurring;
 using Observa.Features.Connectors.Registry;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Services;
+
+DbProviderFactories.RegisterFactory("Npgsql", NpgsqlFactory.Instance);
 
 var builder = WebApplication.CreateBuilder(args);
 
