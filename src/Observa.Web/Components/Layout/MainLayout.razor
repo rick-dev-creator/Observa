@@ -1,12 +1,32 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Nav
 
-<div class="min-h-screen flex bg-zinc-950 text-zinc-100">
-    <aside class="w-56 shrink-0 border-r border-zinc-800 bg-zinc-900">
+<div class="min-h-screen bg-zinc-950 text-zinc-100 md:flex">
+    <header class="md:hidden flex items-center justify-between gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900 sticky top-0 z-20">
+        <div class="flex items-center gap-3">
+            <button type="button" @onclick="ToggleSidebar" aria-label="Toggle navigation"
+                    class="p-1.5 -ml-1.5 text-zinc-300 hover:text-white rounded hover:bg-zinc-800">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+            <a href="" class="font-semibold tracking-tight text-zinc-100">Observa</a>
+        </div>
+    </header>
+
+    @if (_sidebarOpen)
+    {
+        <button type="button" @onclick="CloseSidebar" aria-label="Close menu"
+                class="md:hidden fixed inset-0 bg-black/60 backdrop-blur-[1px] z-30"></button>
+    }
+
+    <aside class="@SidebarClass">
         <NavMenu />
     </aside>
 
     <main class="flex-1 min-w-0">
-        <article class="px-8 py-6 max-w-6xl mx-auto">
+        <article class="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 max-w-6xl mx-auto">
             @Body
         </article>
     </main>
@@ -17,3 +37,27 @@
     <a href="." class="reload underline">Reload</a>
     <span class="dismiss cursor-pointer">×</span>
 </div>
+
+@code {
+    private bool _sidebarOpen;
+
+    private string SidebarClass => _sidebarOpen
+        ? "w-64 shrink-0 border-r border-zinc-800 bg-zinc-900 fixed inset-y-0 left-0 z-40 overflow-y-auto md:relative md:inset-auto md:block md:w-56"
+        : "w-56 shrink-0 border-r border-zinc-800 bg-zinc-900 hidden md:block";
+
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_sidebarOpen)
+        {
+            _sidebarOpen = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void ToggleSidebar() => _sidebarOpen = !_sidebarOpen;
+    private void CloseSidebar() => _sidebarOpen = false;
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

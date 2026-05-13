@@ -31,52 +31,101 @@ else if (_rows.Count == 0)
 else
 {
     <div class="border border-zinc-800 rounded overflow-hidden">
-        <table class="w-full text-sm">
-            <thead class="bg-zinc-900 text-zinc-400 uppercase text-xs tracking-wide">
-                <tr>
-                    <th class="text-left px-4 py-2 font-medium">Name</th>
-                    <th class="text-left px-4 py-2 font-medium">Direction</th>
-                    <th class="text-left px-4 py-2 font-medium">Status</th>
-                    <th class="text-left px-4 py-2 font-medium">Connector</th>
-                    <th class="text-left px-4 py-2 font-medium">Last poll</th>
-                    <th class="text-left px-4 py-2 font-medium">Next poll</th>
-                    <th class="text-right px-4 py-2 font-medium">Expected</th>
-                    <th class="text-right px-4 py-2 font-medium">Last event</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-zinc-800">
-                @foreach (var row in _rows)
-                {
-                    <tr class="hover:bg-zinc-900/50">
-                        <td class="px-4 py-2">
-                            <a href="streams/@row.Id" class="text-zinc-100 hover:text-white font-medium">@row.Name</a>
-                            <div class="text-xs text-zinc-500">@row.Category</div>
-                        </td>
-                        <td class="px-4 py-2 text-zinc-300">@row.Direction</td>
-                        <td class="px-4 py-2"><StatusBadge Status="row.Status" /></td>
-                        <td class="px-4 py-2 text-zinc-300">@(row.ConnectorDisplayName ?? "—")</td>
-                        <td class="px-4 py-2 @(row.LastPollFailed ? "text-amber-400" : "text-zinc-400")">
-                            @FormatRelative(row.LastConnectorPollAt) @(row.LastPollFailed ? "⚠" : "")
-                        </td>
-                        <td class="px-4 py-2 text-zinc-400">@FormatRelative(row.NextPollEstimate, prefix: "in ")</td>
-                        <td class="px-4 py-2 text-right tabular-nums text-zinc-300">
-                            @(row.ExpectedAmount is null ? "—" : $"${row.ExpectedAmount:N2}")
-                        </td>
-                        <td class="px-4 py-2 text-right tabular-nums">
-                            @if (row.LastEventAmount is not null)
-                            {
-                                <MoneyDisplay Amount="row.LastEventAmount.Value" Direction="row.Direction" />
-                                <div class="text-xs text-zinc-500">@FormatRelative(row.LastEventAt)</div>
-                            }
-                            else
-                            {
-                                <span class="text-zinc-600">—</span>
-                            }
-                        </td>
+        <div class="hidden lg:block overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-zinc-900 text-zinc-400 uppercase text-xs tracking-wide">
+                    <tr>
+                        <th class="text-left px-4 py-2 font-medium">Name</th>
+                        <th class="text-left px-4 py-2 font-medium">Direction</th>
+                        <th class="text-left px-4 py-2 font-medium">Status</th>
+                        <th class="text-left px-4 py-2 font-medium">Connector</th>
+                        <th class="text-left px-4 py-2 font-medium">Last poll</th>
+                        <th class="text-left px-4 py-2 font-medium">Next poll</th>
+                        <th class="text-right px-4 py-2 font-medium">Expected</th>
+                        <th class="text-right px-4 py-2 font-medium">Last event</th>
                     </tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody class="divide-y divide-zinc-800">
+                    @foreach (var row in _rows)
+                    {
+                        <tr class="hover:bg-zinc-900/50">
+                            <td class="px-4 py-2">
+                                <a href="streams/@row.Id" class="text-zinc-100 hover:text-white font-medium">@row.Name</a>
+                                <div class="text-xs text-zinc-500">@row.Category</div>
+                            </td>
+                            <td class="px-4 py-2 text-zinc-300">@row.Direction</td>
+                            <td class="px-4 py-2"><StatusBadge Status="row.Status" /></td>
+                            <td class="px-4 py-2 text-zinc-300">@(row.ConnectorDisplayName ?? "—")</td>
+                            <td class="px-4 py-2 @(row.LastPollFailed ? "text-amber-400" : "text-zinc-400")">
+                                @FormatRelative(row.LastConnectorPollAt) @(row.LastPollFailed ? "⚠" : "")
+                            </td>
+                            <td class="px-4 py-2 text-zinc-400">@FormatRelative(row.NextPollEstimate, prefix: "in ")</td>
+                            <td class="px-4 py-2 text-right tabular-nums text-zinc-300">
+                                @(row.ExpectedAmount is null ? "—" : $"${row.ExpectedAmount:N2}")
+                            </td>
+                            <td class="px-4 py-2 text-right tabular-nums">
+                                @if (row.LastEventAmount is not null)
+                                {
+                                    <MoneyDisplay Amount="row.LastEventAmount.Value" Direction="row.Direction" />
+                                    <div class="text-xs text-zinc-500">@FormatRelative(row.LastEventAt)</div>
+                                }
+                                else
+                                {
+                                    <span class="text-zinc-600">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <ul class="lg:hidden divide-y divide-zinc-800">
+            @foreach (var row in _rows)
+            {
+                <li>
+                    <a href="streams/@row.Id" class="block px-4 py-3 hover:bg-zinc-900/50">
+                        <div class="flex items-start justify-between gap-3 mb-2">
+                            <div class="min-w-0">
+                                <p class="text-zinc-100 font-medium truncate">@row.Name</p>
+                                <p class="text-xs text-zinc-500">@row.Direction · @row.Category</p>
+                            </div>
+                            <StatusBadge Status="row.Status" />
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                            <div>
+                                <span class="text-zinc-500">Connector:</span>
+                                <span class="text-zinc-300">@(row.ConnectorDisplayName ?? "—")</span>
+                            </div>
+                            <div>
+                                <span class="text-zinc-500">Expected:</span>
+                                <span class="text-zinc-300 tabular-nums">@(row.ExpectedAmount is null ? "—" : $"${row.ExpectedAmount:N2}")</span>
+                            </div>
+                            <div>
+                                <span class="text-zinc-500">Last poll:</span>
+                                <span class="@(row.LastPollFailed ? "text-amber-400" : "text-zinc-400")">@FormatRelative(row.LastConnectorPollAt)@(row.LastPollFailed ? " ⚠" : "")</span>
+                            </div>
+                            <div>
+                                <span class="text-zinc-500">Next poll:</span>
+                                <span class="text-zinc-400">@FormatRelative(row.NextPollEstimate, prefix: "in ")</span>
+                            </div>
+                            <div class="col-span-2">
+                                <span class="text-zinc-500">Last event:</span>
+                                @if (row.LastEventAmount is not null)
+                                {
+                                    <MoneyDisplay Amount="row.LastEventAmount.Value" Direction="row.Direction" />
+                                    <span class="text-zinc-500">· @FormatRelative(row.LastEventAt)</span>
+                                }
+                                else
+                                {
+                                    <span class="text-zinc-600">—</span>
+                                }
+                            </div>
+                        </div>
+                    </a>
+                </li>
+            }
+        </ul>
     </div>
 }
 

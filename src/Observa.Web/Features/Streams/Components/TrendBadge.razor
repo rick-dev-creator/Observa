@@ -1,0 +1,27 @@
+<span class="@CssClass inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded">
+    <span aria-hidden="true">@Icon</span>
+    <span class="font-medium">@Label</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public decimal? Slope { get; set; }
+
+    private string Icon => Label switch
+    {
+        "Trending up" => "↑",
+        "Trending down" => "↓",
+        "Steady" => "≡",
+        "Volatile" => "↯",
+        _ => "·",
+    };
+
+    private string CssClass => Label switch
+    {
+        "Trending up" => "bg-emerald-900/40 text-emerald-300 border border-emerald-800/60",
+        "Trending down" => "bg-rose-900/40 text-rose-300 border border-rose-800/60",
+        "Steady" => "bg-zinc-800/60 text-zinc-300 border border-zinc-700",
+        "Volatile" => "bg-amber-900/40 text-amber-300 border border-amber-800/60",
+        _ => "bg-zinc-900 text-zinc-500 border border-zinc-800",
+    };
+}

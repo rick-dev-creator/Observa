@@ -41,6 +41,7 @@ builder.Services.AddCrucible();
 builder.Services.AddStreamAggregate();
 builder.Services.AddScoped<StreamService>();
 builder.Services.AddScoped<StreamQueryService>();
+builder.Services.AddScoped<StreamAnalyticsService>();
 builder.Services.AddSingleton<ConnectorCatalogService>();
 
 builder.Services.AddSingleton<IConnector, ManualConnector>();

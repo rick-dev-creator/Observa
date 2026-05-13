@@ -1,0 +1,45 @@
+<svg viewBox="0 0 @Width @Height" preserveAspectRatio="none" class="w-full h-full overflow-visible">
+    @if (Path is not null)
+    {
+        <polyline points="@Path"
+                  fill="none"
+                  stroke="@StrokeColor"
+                  stroke-width="1.5"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                  vector-effect="non-scaling-stroke" />
+        <circle cx="@LastX" cy="@LastY" r="2" fill="@StrokeColor" vector-effect="non-scaling-stroke" />
+    }
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<decimal> Data { get; set; } = [];
+    [Parameter] public int Width { get; set; } = 100;
+    [Parameter] public int Height { get; set; } = 24;
+    [Parameter] public string StrokeColor { get; set; } = "#a1a1aa";
+
+    private string? Path { get; set; }
+    private double LastX { get; set; }
+    private double LastY { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Data.Count < 2) { Path = null; return; }
+
+        var max = (double)Data.Max();
+        var min = (double)Data.Min();
+        var range = Math.Max(max - min, 1.0);
+
+        var step = (double)Width / (Data.Count - 1);
+        var points = new List<string>(Data.Count);
+        for (var i = 0; i < Data.Count; i++)
+        {
+            var x = i * step;
+            var normalized = ((double)Data[i] - min) / range;
+            var y = Height - normalized * (Height - 2) - 1;
+            points.Add($"{x:F1},{y:F1}");
+            if (i == Data.Count - 1) { LastX = x; LastY = y; }
+        }
+        Path = string.Join(' ', points);
+    }
+}

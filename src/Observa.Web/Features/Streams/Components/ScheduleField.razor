@@ -6,7 +6,7 @@
 
     @if (HasSchedule)
     {
-        <div class="grid grid-cols-3 gap-2 pl-6">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-6">
             <div>
                 <label class="block text-xs text-zinc-500 mb-1">Cadence</label>
                 <select class="@FieldCss" @bind="Cadence" @bind:after="EmitChange">

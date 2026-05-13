@@ -1,0 +1,58 @@
+@implements IDisposable
+
+<span class="@CssClass tabular-nums">@FormattedDisplay</span>
+
+@code {
+    [Parameter, EditorRequired] public decimal Target { get; set; }
+    [Parameter] public string Format { get; set; } = "C2";
+    [Parameter] public string CssClass { get; set; } = "";
+    [Parameter] public bool Signed { get; set; }
+    [Parameter] public int DurationMs { get; set; } = 600;
+    [Parameter] public int Steps { get; set; } = 30;
+
+    private decimal _current;
+    private decimal _previousTarget;
+    private CancellationTokenSource? _cts;
+
+    private string FormattedDisplay
+    {
+        get
+        {
+            var v = Math.Round(_current, 2);
+            var s = Math.Abs(v).ToString(Format, System.Globalization.CultureInfo.InvariantCulture);
+            if (!Signed) return s;
+            if (v > 0) return $"+{s}";
+            if (v < 0) return $"−{s}";
+            return s;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Target == _previousTarget) return;
+        _previousTarget = Target;
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        var start = _current;
+        var delta = Target - start;
+        var stepMs = DurationMs / Steps;
+
+        for (var i = 1; i <= Steps; i++)
+        {
+            if (token.IsCancellationRequested) return;
+            var t = (decimal)i / Steps;
+            // ease-out cubic
+            var eased = 1m - (decimal)Math.Pow(1.0 - (double)t, 3);
+            _current = start + delta * eased;
+            StateHasChanged();
+            try { await Task.Delay(stepMs, token); } catch { return; }
+        }
+
+        _current = Target;
+        StateHasChanged();
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

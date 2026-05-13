@@ -1,0 +1,84 @@
+@using ApexCharts
+
+<div class="w-full">
+    <ApexChart TItem="MonthlyAggregateView"
+               Options="@_options"
+               Height="280"
+               Title=""
+               Debug="false">
+
+        <ApexPointSeries TItem="MonthlyAggregateView"
+                         Items="Data"
+                         Name="Income"
+                         SeriesType="SeriesType.Bar"
+                         XValue="@(m => m.Label)"
+                         YValue="@(m => m.Income)" />
+
+        <ApexPointSeries TItem="MonthlyAggregateView"
+                         Items="Data"
+                         Name="Outcome"
+                         SeriesType="SeriesType.Bar"
+                         XValue="@(m => m.Label)"
+                         YValue="@(m => m.Outcome)" />
+
+        <ApexPointSeries TItem="MonthlyAggregateView"
+                         Items="Data"
+                         Name="Net"
+                         SeriesType="SeriesType.Line"
+                         XValue="@(m => m.Label)"
+                         YValue="@(m => m.Net)" />
+    </ApexChart>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<MonthlyAggregateView> Data { get; set; } = [];
+
+    private ApexChartOptions<MonthlyAggregateView> _options = null!;
+
+    protected override void OnInitialized()
+    {
+        _options = new ApexChartOptions<MonthlyAggregateView>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                ForeColor = "#a1a1aa",
+                Toolbar = new Toolbar { Show = false },
+                Animations = new Animations { Enabled = true, Speed = 400 },
+                Stacked = false,
+                FontFamily = "ui-sans-serif, system-ui",
+            },
+            Colors = new List<string> { "#10b981", "#f43f5e", "#fafafa" },
+            Stroke = new Stroke
+            {
+                Curve = new List<Curve> { Curve.Smooth, Curve.Smooth, Curve.Smooth },
+                Width = new List<double> { 0, 0, 3 },
+            },
+            PlotOptions = new PlotOptions
+            {
+                Bar = new PlotOptionsBar { ColumnWidth = "55%", BorderRadius = 4 }
+            },
+            Grid = new Grid
+            {
+                BorderColor = "#27272a",
+                StrokeDashArray = 3,
+            },
+            Xaxis = new XAxis
+            {
+                AxisBorder = new AxisBorder { Color = "#27272a" },
+                AxisTicks = new AxisTicks { Color = "#27272a" },
+            },
+            Tooltip = new Tooltip
+            {
+                Theme = Mode.Dark,
+                Y = new TooltipY { Formatter = "function(val) { return '$' + val.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }" },
+            },
+            Legend = new Legend
+            {
+                Position = LegendPosition.Top,
+                HorizontalAlign = Align.Right,
+            },
+            DataLabels = new DataLabels { Enabled = false },
+        };
+    }
+}
