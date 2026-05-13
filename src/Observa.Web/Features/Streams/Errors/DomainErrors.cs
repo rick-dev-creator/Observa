@@ -15,6 +15,13 @@ public static class DomainErrors
     public static class FlowEvent
     {
         public const string AmountNotPositive = "FLOW_EVENT_AMOUNT_NOT_POSITIVE";
+        public const string Duplicate = "FLOW_EVENT_DUPLICATE_EXTERNAL_REF";
+    }
+
+    public static class ConnectorBinding
+    {
+        public const string ConnectorIdRequired = "CONNECTOR_BINDING_CONNECTOR_ID_REQUIRED";
+        public const string ExternalRefRequired = "CONNECTOR_BINDING_EXTERNAL_REF_REQUIRED";
     }
 
     public static class Money

@@ -20,7 +20,7 @@ public sealed class DeleteStreamHandler(IGrainFactory grains)
     {
         var grain = grains.GetGrain<IStreamGrain>(agg.Id.Value);
         await grain.WriteAsync(StreamGrainState.From(agg));
-        await grain.RemoveScheduleReminderAsync();
+        await grain.RemoveConnectorPollReminderAsync();
         return Result.Success();
     }
 }

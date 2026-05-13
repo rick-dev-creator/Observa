@@ -4,6 +4,7 @@ public interface IStreamGrain : IGrainWithGuidKey
 {
     Task<StreamGrainState> GetAsync();
     Task WriteAsync(StreamGrainState newState);
-    Task EnsureScheduleReminderAsync(RecurrenceState schedule);
-    Task RemoveScheduleReminderAsync();
+    Task EnsureConnectorPollReminderAsync(TimeSpan pollInterval);
+    Task RemoveConnectorPollReminderAsync();
+    Task UpdateLastSyncAsync(DateTimeOffset lastSync);
 }

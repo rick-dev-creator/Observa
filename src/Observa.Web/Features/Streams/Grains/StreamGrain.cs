@@ -1,5 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Observa.Features.Streams.Enums;
+using Observa.Features.Connectors.Orchestration;
 using Orleans.Runtime;
 
 namespace Observa.Features.Streams.Grains;
@@ -9,7 +10,7 @@ public sealed class StreamGrain(
     ILogger<StreamGrain> logger)
     : Grain, IStreamGrain, IRemindable
 {
-    private const string ScheduleReminderName = "schedule-poll";
+    private const string ConnectorPollReminderName = "connector-poll";
 
     public Task<StreamGrainState> GetAsync() => Task.FromResult(state.State);
 
@@ -19,33 +20,46 @@ public sealed class StreamGrain(
         await state.WriteStateAsync();
     }
 
-    public async Task EnsureScheduleReminderAsync(RecurrenceState schedule)
+    public async Task EnsureConnectorPollReminderAsync(TimeSpan pollInterval)
     {
-        var period = schedule.Cadence switch
-        {
-            Cadence.Monthly => TimeSpan.FromDays(30),
-            Cadence.Weekly => TimeSpan.FromDays(7),
-            Cadence.Biweekly => TimeSpan.FromDays(14),
-            _ => TimeSpan.Zero,
-        };
+        if (pollInterval <= TimeSpan.Zero) return;
 
-        if (period == TimeSpan.Zero) return;
-
-        await this.RegisterOrUpdateReminder(ScheduleReminderName, period, period);
+        await this.RegisterOrUpdateReminder(ConnectorPollReminderName, pollInterval, pollInterval);
     }
 
-    public async Task RemoveScheduleReminderAsync()
+    public async Task RemoveConnectorPollReminderAsync()
     {
-        var existing = await this.GetReminder(ScheduleReminderName);
+        var existing = await this.GetReminder(ConnectorPollReminderName);
         if (existing is not null)
             await this.UnregisterReminder(existing);
     }
 
+    public async Task UpdateLastSyncAsync(DateTimeOffset lastSync)
+    {
+        if (state.State.Binding is null) return;
+        state.State.Binding.LastSync = lastSync;
+        await state.WriteStateAsync();
+    }
+
     public Task ReceiveReminder(string reminderName, TickStatus status)
     {
-        logger.LogInformation(
-            "Stream {StreamId} reminder '{Reminder}' fired (Status={Status}); polling not implemented yet",
-            state.State.Id, reminderName, status);
+        if (reminderName != ConnectorPollReminderName) return Task.CompletedTask;
+        var streamId = this.GetPrimaryKey();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var orchestrator = ServiceProvider.GetRequiredService<ConnectorPollOrchestrator>();
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                await orchestrator.PollAsync(streamId, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Connector poll failed for stream {StreamId}.", streamId);
+            }
+        });
+
         return Task.CompletedTask;
     }
 }

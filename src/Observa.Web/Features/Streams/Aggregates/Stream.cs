@@ -2,6 +2,7 @@ using Crucible.Domain.Aggregates;
 using Crucible.Domain.Attributes;
 using Crucible.Domain.Errors;
 using Crucible.Domain.Results;
+using Observa.Features.Connectors.Domain;
 using Observa.Features.Streams.Dtos;
 using Observa.Features.Streams.Entities;
 using Observa.Features.Streams.Enums;
@@ -24,6 +25,7 @@ public partial class Stream : AggregateRoot<StreamId>
     public Direction Direction { get; private set; }
     public Recurrence? Schedule { get; private set; }
     public Money? ExpectedAmount { get; private set; }
+    public ConnectorBinding? Binding { get; private set; }
     public StreamStatus Status { get; private set; } = StreamStatus.Active;
 
     public IReadOnlyList<FlowEvent> Events => _events;
@@ -55,6 +57,7 @@ public partial class Stream : AggregateRoot<StreamId>
         Direction = dto.Direction;
         Schedule = dto.Schedule;
         ExpectedAmount = expected;
+        Binding = dto.Binding;
         Status = StreamStatus.Active;
 
         var evt = new StreamRegistered(Id, Name, Direction, Category);
@@ -70,13 +73,21 @@ public partial class Stream : AggregateRoot<StreamId>
         if (dto.Amount <= 0)
             return new ValidationError(DomainErrors.FlowEvent.AmountNotPositive, "Flow event amount must be positive.", nameof(dto.Amount));
 
+        if (dto.ExternalRef is { Length: > 0 } extRef
+            && _events.Any(e => e.ExternalRef == extRef))
+        {
+            return new BusinessRuleError(
+                DomainErrors.FlowEvent.Duplicate,
+                $"Flow event with external ref '{extRef}' already ingested.");
+        }
+
         var moneyResult = Money.Create(dto.Amount);
         if (moneyResult.IsFailure)
             return Result<FlowEventIngested>.Failure(moneyResult.Errors);
 
         var eventId = FlowEventId.New();
         var amount = moneyResult.Value;
-        var flowEvent = new FlowEvent(eventId, dto.OccurredAt, amount, dto.Source);
+        var flowEvent = new FlowEvent(eventId, dto.OccurredAt, amount, dto.Source, dto.ExternalRef);
         _events.Add(flowEvent);
 
         var domainEvt = new FlowEventIngested(Id, eventId, amount, dto.OccurredAt);

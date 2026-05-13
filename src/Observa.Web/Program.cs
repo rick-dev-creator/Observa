@@ -1,5 +1,10 @@
 using Crucible.Chains.DependencyInjection;
 using Observa.Components;
+using Observa.Connectors.Abstractions;
+using Observa.Connectors.Patreon;
+using Observa.Features.Connectors.Manual;
+using Observa.Features.Connectors.Orchestration;
+using Observa.Features.Connectors.Registry;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Services;
 
@@ -28,6 +33,11 @@ builder.UseOrleans(silo =>
 builder.Services.AddCrucible();
 builder.Services.AddStreamAggregate();
 builder.Services.AddScoped<StreamService>();
+
+builder.Services.AddSingleton<IConnector, ManualConnector>();
+builder.Services.AddPatreonConnector(builder.Configuration);
+builder.Services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+builder.Services.AddSingleton<ConnectorPollOrchestrator>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

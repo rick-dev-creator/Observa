@@ -14,9 +14,9 @@
     <ProjectReference Include="..\Observa.ServiceDefaults\Observa.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\..\crucible\src\Crucible.Domain\Crucible.Domain.csproj" />
     <ProjectReference Include="..\..\..\crucible\src\Crucible.Chains\Crucible.Chains.csproj" />
-    <ProjectReference Include="..\..\..\crucible\src\Crucible.Generators\Crucible.Generators.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\crucible\src\Crucible.Generators\Crucible.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Observa.Connectors.Abstractions\Observa.Connectors.Abstractions.csproj" />
+    <ProjectReference Include="..\Observa.Connectors.Patreon\Observa.Connectors.Patreon.csproj" />
   </ItemGroup>
 
   <ItemGroup>

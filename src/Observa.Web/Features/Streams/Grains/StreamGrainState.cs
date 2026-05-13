@@ -1,3 +1,4 @@
+using Observa.Features.Connectors.Domain;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Entities;
 using Observa.Features.Streams.Enums;
@@ -18,6 +19,7 @@ public sealed class StreamGrainState
     [Id(6)] public MoneyState? ExpectedAmount { get; set; }
     [Id(7)] public StreamStatus Status { get; set; }
     [Id(8)] public List<FlowEventSnapshot> Events { get; set; } = new();
+    [Id(9)] public ConnectorBindingState? Binding { get; set; }
 
     public static StreamGrainState From(Aggregates.Stream agg) => new()
     {
@@ -30,6 +32,7 @@ public sealed class StreamGrainState
         ExpectedAmount = agg.ExpectedAmount is { } m ? MoneyState.From(m) : null,
         Status = agg.Status,
         Events = agg.Events.Select(FlowEventSnapshot.From).ToList(),
+        Binding = agg.Binding is { } b ? ConnectorBindingState.From(b) : null,
     };
 
     public IStreamSnapshot AsCrucibleSnapshot() => new View(this);
@@ -43,6 +46,7 @@ public sealed class StreamGrainState
         public Direction Direction => s.Direction;
         public Recurrence? Schedule => s.Schedule?.ToDomain();
         public Money? ExpectedAmount => s.ExpectedAmount?.ToDomain();
+        public ConnectorBinding? Binding => s.Binding?.ToDomain();
         public StreamStatus Status => s.Status;
         public IReadOnlyList<IFlowEventSnapshot> Events { get; } =
             s.Events.Select(e => e.AsCrucibleSnapshot()).ToList();

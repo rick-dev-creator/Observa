@@ -168,6 +168,49 @@ public sealed class StreamAggregateTests
     }
 
     [Fact]
+    public void IngestEvent_WithDuplicateExternalRef_Fails()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+
+        var first = new IngestEventDto(DateTimeOffset.UtcNow, 100m, IngestionSource.Connector, "patreon-pledge-42");
+        stream.IngestEvent(first);
+
+        var duplicate = new IngestEventDto(DateTimeOffset.UtcNow.AddHours(1), 100m, IngestionSource.Connector, "patreon-pledge-42");
+        var result = stream.IngestEvent(duplicate);
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.FlowEvent.Duplicate);
+        stream.Events.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void IngestEvent_DifferentExternalRefs_DoesNotDedup()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+
+        stream.IngestEvent(new IngestEventDto(DateTimeOffset.UtcNow, 100m, IngestionSource.Connector, "a"));
+        var second = stream.IngestEvent(new IngestEventDto(DateTimeOffset.UtcNow, 200m, IngestionSource.Connector, "b"));
+
+        second.IsSuccess.Should().BeTrue();
+        stream.Events.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void IngestEvent_NullExternalRef_NoDedup()
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto());
+
+        stream.IngestEvent(new IngestEventDto(DateTimeOffset.UtcNow, 50m, IngestionSource.Manual));
+        var second = stream.IngestEvent(new IngestEventDto(DateTimeOffset.UtcNow, 50m, IngestionSource.Manual));
+
+        second.IsSuccess.Should().BeTrue();
+        stream.Events.Should().HaveCount(2);
+    }
+
+    [Fact]
     public void Pause_OnActiveStream_TransitionsToPausedAndRaisesEvent()
     {
         var stream = Stream.__CreateForChain();

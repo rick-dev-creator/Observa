@@ -1,6 +1,10 @@
 using Crucible.Chains.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Observa.Connectors.Abstractions;
+using Observa.Features.Connectors.Manual;
+using Observa.Features.Connectors.Orchestration;
+using Observa.Features.Connectors.Registry;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Services;
 using Orleans.Hosting;
@@ -37,7 +41,10 @@ public sealed class ObservaTestClusterFixture : IAsyncLifetime
 
             silo.Services
                 .AddCrucible()
-                .AddStreamAggregate();
+                .AddStreamAggregate()
+                .AddSingleton<IConnector, ManualConnector>()
+                .AddSingleton<IConnectorRegistry, ConnectorRegistry>()
+                .AddSingleton<ConnectorPollOrchestrator>();
         }
     }
 
@@ -48,7 +55,9 @@ public sealed class ObservaTestClusterFixture : IAsyncLifetime
             client.Services
                 .AddCrucible()
                 .AddStreamAggregate()
-                .AddScoped<StreamService>();
+                .AddScoped<StreamService>()
+                .AddSingleton<IConnector, ManualConnector>()
+                .AddSingleton<IConnectorRegistry, ConnectorRegistry>();
         }
     }
 }

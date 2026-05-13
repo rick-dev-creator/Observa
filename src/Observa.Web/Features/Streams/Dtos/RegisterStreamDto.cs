@@ -1,3 +1,4 @@
+using Observa.Features.Connectors.Domain;
 using Observa.Features.Streams.Enums;
 using Observa.Features.Streams.ValueObjects;
 
@@ -8,4 +9,5 @@ public sealed record RegisterStreamDto(
     string Category,
     Direction Direction,
     Recurrence? Schedule,
-    decimal? ExpectedAmount);
+    decimal? ExpectedAmount,
+    ConnectorBinding? Binding = null);

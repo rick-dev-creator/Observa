@@ -1,10 +1,13 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Observa.AppHost/Observa.AppHost.csproj" />
+    <Project Path="src/Observa.Connectors.Abstractions/Observa.Connectors.Abstractions.csproj" />
+    <Project Path="src/Observa.Connectors.Patreon/Observa.Connectors.Patreon.csproj" />
     <Project Path="src/Observa.ServiceDefaults/Observa.ServiceDefaults.csproj" />
     <Project Path="src/Observa.Web/Observa.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Observa.Connectors.Patreon.Tests/Observa.Connectors.Patreon.Tests.csproj" />
     <Project Path="tests/Observa.Domain.Tests/Observa.Domain.Tests.csproj" />
     <Project Path="tests/Observa.Integration.Tests/Observa.Integration.Tests.csproj" />
   </Folder>

@@ -12,6 +12,7 @@ public sealed class FlowEventSnapshot
     [Id(1)] public DateTimeOffset OccurredAt { get; set; }
     [Id(2)] public MoneyState Amount { get; set; } = new();
     [Id(3)] public IngestionSource Source { get; set; }
+    [Id(4)] public string? ExternalRef { get; set; }
 
     public static FlowEventSnapshot From(FlowEvent ev) => new()
     {
@@ -19,6 +20,7 @@ public sealed class FlowEventSnapshot
         OccurredAt = ev.OccurredAt,
         Amount = MoneyState.From(ev.Amount),
         Source = ev.Source,
+        ExternalRef = ev.ExternalRef,
     };
 
     public IFlowEventSnapshot AsCrucibleSnapshot() => new View(this);
@@ -29,5 +31,6 @@ public sealed class FlowEventSnapshot
         public DateTimeOffset OccurredAt => s.OccurredAt;
         public Money Amount => s.Amount.ToDomain();
         public IngestionSource Source => s.Source;
+        public string? ExternalRef => s.ExternalRef;
     }
 }
