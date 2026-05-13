@@ -34,8 +34,7 @@ public sealed class PatreonConnector : IConnector
     public ConnectorMetadata Metadata { get; }
 
     public Task<IReadOnlyList<ConnectorFlowEvent>> FetchEventsAsync(
-        string externalRef,
-        DateTimeOffset since,
+        ConnectorFetchContext context,
         CancellationToken ct) =>
-        _api.FetchPledgesAsync(externalRef, _options.AccessToken ?? "", since, ct);
+        _api.FetchPledgesAsync(context.ExternalRef, _options.AccessToken ?? "", context.Since, ct);
 }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Observa.Connectors.Abstractions;
 using Observa.Features.Connectors.Manual;
 using Observa.Features.Connectors.Orchestration;
+using Observa.Features.Connectors.Recurring;
 using Observa.Features.Connectors.Registry;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Services;
@@ -43,6 +44,7 @@ public sealed class ObservaTestClusterFixture : IAsyncLifetime
                 .AddCrucible()
                 .AddStreamAggregate()
                 .AddSingleton<IConnector, ManualConnector>()
+                .AddSingleton<IConnector, RecurringConnector>()
                 .AddSingleton<IConnectorRegistry, ConnectorRegistry>()
                 .AddSingleton<ConnectorPollOrchestrator>();
         }
@@ -57,6 +59,7 @@ public sealed class ObservaTestClusterFixture : IAsyncLifetime
                 .AddStreamAggregate()
                 .AddScoped<StreamService>()
                 .AddSingleton<IConnector, ManualConnector>()
+                .AddSingleton<IConnector, RecurringConnector>()
                 .AddSingleton<IConnectorRegistry, ConnectorRegistry>();
         }
     }

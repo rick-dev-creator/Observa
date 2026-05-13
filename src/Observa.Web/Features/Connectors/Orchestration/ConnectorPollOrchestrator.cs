@@ -40,10 +40,11 @@ public sealed class ConnectorPollOrchestrator(
         IReadOnlyList<ConnectorFlowEvent> fetched;
         try
         {
-            fetched = await connector.FetchEventsAsync(
-                state.Binding.ExternalRef,
-                state.Binding.LastSync ?? DateTimeOffset.UtcNow.AddDays(-30),
-                ct);
+            var fetchContext = new ConnectorFetchContext(
+                CallerId: streamId,
+                ExternalRef: state.Binding.ExternalRef,
+                Since: state.Binding.LastSync ?? DateTimeOffset.UtcNow.AddDays(-30));
+            fetched = await connector.FetchEventsAsync(fetchContext, ct);
         }
         catch (Exception ex)
         {

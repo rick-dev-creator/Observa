@@ -15,8 +15,7 @@ public sealed class ManualConnector : IConnector
         ConfigSchema: []);
 
     public Task<IReadOnlyList<ConnectorFlowEvent>> FetchEventsAsync(
-        string externalRef,
-        DateTimeOffset since,
+        ConnectorFetchContext context,
         CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ConnectorFlowEvent>>([]);
 }

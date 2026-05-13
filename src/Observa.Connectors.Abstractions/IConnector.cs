@@ -6,7 +6,6 @@ public interface IConnector
     ConnectorMetadata Metadata { get; }
 
     Task<IReadOnlyList<ConnectorFlowEvent>> FetchEventsAsync(
-        string externalRef,
-        DateTimeOffset since,
+        ConnectorFetchContext context,
         CancellationToken ct);
 }

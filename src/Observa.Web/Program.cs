@@ -4,6 +4,7 @@ using Observa.Connectors.Abstractions;
 using Observa.Connectors.Patreon;
 using Observa.Features.Connectors.Manual;
 using Observa.Features.Connectors.Orchestration;
+using Observa.Features.Connectors.Recurring;
 using Observa.Features.Connectors.Registry;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Services;
@@ -35,6 +36,7 @@ builder.Services.AddStreamAggregate();
 builder.Services.AddScoped<StreamService>();
 
 builder.Services.AddSingleton<IConnector, ManualConnector>();
+builder.Services.AddSingleton<IConnector, RecurringConnector>();
 builder.Services.AddPatreonConnectors(builder.Configuration);
 builder.Services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 builder.Services.AddSingleton<ConnectorPollOrchestrator>();
