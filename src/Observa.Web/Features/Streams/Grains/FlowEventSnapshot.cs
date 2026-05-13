@@ -8,16 +8,16 @@ namespace Observa.Features.Streams.Grains;
 [GenerateSerializer]
 public sealed class FlowEventSnapshot
 {
-    [Id(0)] public FlowEventId Id { get; set; }
+    [Id(0)] public Guid Id { get; set; }
     [Id(1)] public DateTimeOffset OccurredAt { get; set; }
-    [Id(2)] public Money Amount { get; set; } = Money.Zero;
+    [Id(2)] public MoneyState Amount { get; set; } = new();
     [Id(3)] public IngestionSource Source { get; set; }
 
     public static FlowEventSnapshot From(FlowEvent ev) => new()
     {
-        Id = ev.Id,
+        Id = ev.Id.Value,
         OccurredAt = ev.OccurredAt,
-        Amount = ev.Amount,
+        Amount = MoneyState.From(ev.Amount),
         Source = ev.Source,
     };
 
@@ -25,9 +25,9 @@ public sealed class FlowEventSnapshot
 
     private sealed class View(FlowEventSnapshot s) : IFlowEventSnapshot
     {
-        public FlowEventId Id => s.Id;
+        public FlowEventId Id => FlowEventId.From(s.Id);
         public DateTimeOffset OccurredAt => s.OccurredAt;
-        public Money Amount => s.Amount;
+        public Money Amount => s.Amount.ToDomain();
         public IngestionSource Source => s.Source;
     }
 }

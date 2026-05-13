@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Observa.Features.Streams.Enums;
-using Observa.Features.Streams.ValueObjects;
 using Orleans.Runtime;
 
 namespace Observa.Features.Streams.Grains;
@@ -20,7 +19,7 @@ public sealed class StreamGrain(
         await state.WriteStateAsync();
     }
 
-    public async Task EnsureScheduleReminderAsync(Recurrence schedule)
+    public async Task EnsureScheduleReminderAsync(RecurrenceState schedule)
     {
         var period = schedule.Cadence switch
         {
@@ -46,7 +45,7 @@ public sealed class StreamGrain(
     {
         logger.LogInformation(
             "Stream {StreamId} reminder '{Reminder}' fired (Status={Status}); polling not implemented yet",
-            state.State.Id.Value, reminderName, status);
+            state.State.Id, reminderName, status);
         return Task.CompletedTask;
     }
 }

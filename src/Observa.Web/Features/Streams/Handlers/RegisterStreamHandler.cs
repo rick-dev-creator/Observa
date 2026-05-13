@@ -22,7 +22,7 @@ public sealed class RegisterStreamHandler(IGrainFactory grains)
         await grain.WriteAsync(StreamGrainState.From(agg));
 
         if (agg.Schedule is { } schedule)
-            await grain.EnsureScheduleReminderAsync(schedule);
+            await grain.EnsureScheduleReminderAsync(RecurrenceState.From(schedule));
 
         return Result.Success();
     }
