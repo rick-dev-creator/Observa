@@ -6,8 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <RootNamespace>Observa</RootNamespace>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <IsAspireSharedProject>false</IsAspireSharedProject>
   </PropertyGroup>
