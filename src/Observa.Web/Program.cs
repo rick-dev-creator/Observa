@@ -1,5 +1,5 @@
 using Crucible.Chains.DependencyInjection;
-using Observa.Web.Components;
+using Observa.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 

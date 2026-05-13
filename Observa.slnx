@@ -4,4 +4,7 @@
     <Project Path="src/Observa.ServiceDefaults/Observa.ServiceDefaults.csproj" />
     <Project Path="src/Observa.Web/Observa.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Observa.Domain.Tests/Observa.Domain.Tests.csproj" />
+  </Folder>
 </Solution>
