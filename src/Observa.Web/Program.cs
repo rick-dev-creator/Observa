@@ -35,7 +35,7 @@ builder.Services.AddStreamAggregate();
 builder.Services.AddScoped<StreamService>();
 
 builder.Services.AddSingleton<IConnector, ManualConnector>();
-builder.Services.AddPatreonConnector(builder.Configuration);
+builder.Services.AddPatreonConnectors(builder.Configuration);
 builder.Services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 builder.Services.AddSingleton<ConnectorPollOrchestrator>();
 
