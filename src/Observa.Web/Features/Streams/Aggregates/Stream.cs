@@ -5,6 +5,7 @@ using Crucible.Domain.Results;
 using Observa.Features.Streams.Dtos;
 using Observa.Features.Streams.Entities;
 using Observa.Features.Streams.Enums;
+using Observa.Features.Streams.Errors;
 using Observa.Features.Streams.Events;
 using Observa.Features.Streams.Identifiers;
 using Observa.Features.Streams.ValueObjects;
@@ -32,9 +33,9 @@ public partial class Stream : AggregateRoot<StreamId>
     {
         var errors = new List<IError>();
         if (string.IsNullOrWhiteSpace(dto.Name))
-            errors.Add(new ValidationError("STREAM_NAME_REQUIRED", "Stream name is required.", nameof(dto.Name)));
+            errors.Add(new ValidationError(DomainErrors.Stream.NameRequired, "Stream name is required.", nameof(dto.Name)));
         if (string.IsNullOrWhiteSpace(dto.Category))
-            errors.Add(new ValidationError("STREAM_CATEGORY_REQUIRED", "Stream category is required.", nameof(dto.Category)));
+            errors.Add(new ValidationError(DomainErrors.Stream.CategoryRequired, "Stream category is required.", nameof(dto.Category)));
 
         Money? expected = null;
         if (dto.ExpectedAmount is { } expectedRaw)
@@ -65,9 +66,9 @@ public partial class Stream : AggregateRoot<StreamId>
     public Result<FlowEventIngested> IngestEvent(IngestEventDto dto)
     {
         if (Status != StreamStatus.Active)
-            return new BusinessRuleError("STREAM_NOT_ACTIVE", $"Stream must be Active to ingest events; current status is {Status}.");
+            return new BusinessRuleError(DomainErrors.Stream.NotActive, $"Stream must be Active to ingest events; current status is {Status}.");
         if (dto.Amount <= 0)
-            return new ValidationError("FLOW_EVENT_AMOUNT_NOT_POSITIVE", "Flow event amount must be positive.", nameof(dto.Amount));
+            return new ValidationError(DomainErrors.FlowEvent.AmountNotPositive, "Flow event amount must be positive.", nameof(dto.Amount));
 
         var moneyResult = Money.Create(dto.Amount);
         if (moneyResult.IsFailure)
@@ -87,7 +88,7 @@ public partial class Stream : AggregateRoot<StreamId>
     public Result<StreamPaused> Pause()
     {
         if (Status != StreamStatus.Active)
-            return new BusinessRuleError("STREAM_NOT_ACTIVE_FOR_PAUSE", $"Only Active streams can be paused; current status is {Status}.");
+            return new BusinessRuleError(DomainErrors.Stream.NotActiveForPause, $"Only Active streams can be paused; current status is {Status}.");
 
         Status = StreamStatus.Paused;
         var evt = new StreamPaused(Id);
@@ -99,7 +100,7 @@ public partial class Stream : AggregateRoot<StreamId>
     public Result<StreamResumed> Resume()
     {
         if (Status != StreamStatus.Paused)
-            return new BusinessRuleError("STREAM_NOT_PAUSED_FOR_RESUME", $"Only Paused streams can be resumed; current status is {Status}.");
+            return new BusinessRuleError(DomainErrors.Stream.NotPausedForResume, $"Only Paused streams can be resumed; current status is {Status}.");
 
         Status = StreamStatus.Active;
         var evt = new StreamResumed(Id);
@@ -111,7 +112,7 @@ public partial class Stream : AggregateRoot<StreamId>
     public Result<StreamStopped> Stop()
     {
         if (Status is StreamStatus.Stopped or StreamStatus.Deleted)
-            return new BusinessRuleError("STREAM_ALREADY_TERMINAL", $"Stream is already in terminal state {Status}; cannot stop.");
+            return new BusinessRuleError(DomainErrors.Stream.AlreadyTerminal, $"Stream is already in terminal state {Status}; cannot stop.");
 
         Status = StreamStatus.Stopped;
         var evt = new StreamStopped(Id);
@@ -123,7 +124,7 @@ public partial class Stream : AggregateRoot<StreamId>
     public Result<StreamDeleted> Delete()
     {
         if (Status is StreamStatus.Stopped or StreamStatus.Deleted)
-            return new BusinessRuleError("STREAM_ALREADY_TERMINAL", $"Stream is already in terminal state {Status}; cannot delete.");
+            return new BusinessRuleError(DomainErrors.Stream.AlreadyTerminal, $"Stream is already in terminal state {Status}; cannot delete.");
 
         Status = StreamStatus.Deleted;
         var evt = new StreamDeleted(Id);

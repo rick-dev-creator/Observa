@@ -1,6 +1,7 @@
 using Crucible.Domain.Errors;
 using FluentAssertions;
 using Observa.Features.Streams.ValueObjects;
+using Observa.Features.Streams.Errors;
 
 namespace Observa.Domain.Tests.Streams;
 
@@ -30,7 +31,7 @@ public sealed class MoneyTests
         var result = Money.Create(-1m);
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "MONEY_NEGATIVE_AMOUNT");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Money.NegativeAmount);
         result.Errors[0].Should().BeOfType<ValidationError>();
     }
 

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Observa.Features.Streams.Enums;
+using Observa.Features.Streams.Errors;
 using Observa.Features.Streams.ValueObjects;
 
 namespace Observa.Domain.Tests.Streams;
@@ -26,7 +27,7 @@ public sealed class RecurrenceTests
         var result = Recurrence.Create(Cadence.Monthly, anchor, Variability.Fixed);
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "RECURRENCE_MONTHLY_ANCHOR_RANGE");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Recurrence.MonthlyAnchorRange);
     }
 
     [Theory]

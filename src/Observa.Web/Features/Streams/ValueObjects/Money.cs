@@ -2,6 +2,7 @@ using Crucible.Domain.Aggregates;
 using Crucible.Domain.Attributes;
 using Crucible.Domain.Errors;
 using Crucible.Domain.Results;
+using Observa.Features.Streams.Errors;
 
 namespace Observa.Features.Streams.ValueObjects;
 
@@ -16,7 +17,7 @@ public sealed partial record Money : ValueObject
     {
         if (amount < 0)
             return Result.Failure(new ValidationError(
-                "MONEY_NEGATIVE_AMOUNT",
+                DomainErrors.Money.NegativeAmount,
                 "Money amount must be non-negative.",
                 nameof(Amount)));
         return Result.Success();

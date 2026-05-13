@@ -3,6 +3,7 @@ using Crucible.Domain.Attributes;
 using Crucible.Domain.Errors;
 using Crucible.Domain.Results;
 using Observa.Features.Streams.Enums;
+using Observa.Features.Streams.Errors;
 
 namespace Observa.Features.Streams.ValueObjects;
 
@@ -23,19 +24,19 @@ public sealed partial record Recurrence : ValueObject
         {
             case Cadence.Monthly when anchor is < 1 or > 31:
                 errors.Add(new ValidationError(
-                    "RECURRENCE_MONTHLY_ANCHOR_RANGE",
+                    DomainErrors.Recurrence.MonthlyAnchorRange,
                     "Monthly anchor must be between 1 and 31 (day of month).",
                     nameof(Anchor)));
                 break;
             case Cadence.Weekly when anchor is < 1 or > 7:
                 errors.Add(new ValidationError(
-                    "RECURRENCE_WEEKLY_ANCHOR_RANGE",
+                    DomainErrors.Recurrence.WeeklyAnchorRange,
                     "Weekly anchor must be between 1 and 7 (ISO day of week).",
                     nameof(Anchor)));
                 break;
             case Cadence.Biweekly when anchor is < 1 or > 7:
                 errors.Add(new ValidationError(
-                    "RECURRENCE_BIWEEKLY_ANCHOR_RANGE",
+                    DomainErrors.Recurrence.BiweeklyAnchorRange,
                     "Biweekly anchor must be between 1 and 7 (ISO day of week).",
                     nameof(Anchor)));
                 break;

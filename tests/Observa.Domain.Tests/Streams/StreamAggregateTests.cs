@@ -1,6 +1,7 @@
 using Crucible.Domain.Errors;
 using FluentAssertions;
 using Observa.Features.Streams.Aggregates;
+using Observa.Features.Streams.Errors;
 using Observa.Features.Streams.Dtos;
 using Observa.Features.Streams.Enums;
 using Observa.Features.Streams.Events;
@@ -56,7 +57,7 @@ public sealed class StreamAggregateTests
         var result = stream.Register(ValidRegisterDto(name: ""));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().Contain(e => e.ErrorCode == "STREAM_NAME_REQUIRED");
+        result.Errors.Should().Contain(e => e.ErrorCode == DomainErrors.Stream.NameRequired);
     }
 
     [Fact]
@@ -67,7 +68,7 @@ public sealed class StreamAggregateTests
         var result = stream.Register(ValidRegisterDto(category: ""));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().Contain(e => e.ErrorCode == "STREAM_CATEGORY_REQUIRED");
+        result.Errors.Should().Contain(e => e.ErrorCode == DomainErrors.Stream.CategoryRequired);
     }
 
     [Fact]
@@ -78,7 +79,7 @@ public sealed class StreamAggregateTests
         var result = stream.Register(ValidRegisterDto(expectedAmount: -50m));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().Contain(e => e.ErrorCode == "MONEY_NEGATIVE_AMOUNT");
+        result.Errors.Should().Contain(e => e.ErrorCode == DomainErrors.Money.NegativeAmount);
     }
 
     [Fact]
@@ -91,9 +92,9 @@ public sealed class StreamAggregateTests
         result.IsFailure.Should().BeTrue();
         result.Errors.Select(e => e.ErrorCode).Should().Contain(new[]
         {
-            "STREAM_NAME_REQUIRED",
-            "STREAM_CATEGORY_REQUIRED",
-            "MONEY_NEGATIVE_AMOUNT",
+            DomainErrors.Stream.NameRequired,
+            DomainErrors.Stream.CategoryRequired,
+            DomainErrors.Money.NegativeAmount,
         });
     }
 
@@ -137,7 +138,7 @@ public sealed class StreamAggregateTests
         var result = stream.IngestEvent(ValidIngestDto(0m));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "FLOW_EVENT_AMOUNT_NOT_POSITIVE");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.FlowEvent.AmountNotPositive);
         result.Errors[0].Should().BeOfType<ValidationError>();
     }
 
@@ -150,7 +151,7 @@ public sealed class StreamAggregateTests
         var result = stream.IngestEvent(ValidIngestDto(-1m));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "FLOW_EVENT_AMOUNT_NOT_POSITIVE");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.FlowEvent.AmountNotPositive);
     }
 
     [Fact]
@@ -189,7 +190,7 @@ public sealed class StreamAggregateTests
         var result = stream.Pause();
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE_FOR_PAUSE");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActiveForPause);
     }
 
     [Fact]
@@ -215,7 +216,7 @@ public sealed class StreamAggregateTests
         var result = stream.Resume();
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_PAUSED_FOR_RESUME");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotPausedForResume);
     }
 
     [Fact]
@@ -242,7 +243,7 @@ public sealed class StreamAggregateTests
         var result = stream.IngestEvent(ValidIngestDto(150m));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActive);
     }
 
     [Fact]
@@ -281,7 +282,7 @@ public sealed class StreamAggregateTests
         var result = stream.Stop();
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_ALREADY_TERMINAL");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.AlreadyTerminal);
     }
 
     [Fact]
@@ -294,7 +295,7 @@ public sealed class StreamAggregateTests
         var result = stream.Resume();
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_PAUSED_FOR_RESUME");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotPausedForResume);
     }
 
     [Fact]
@@ -307,7 +308,7 @@ public sealed class StreamAggregateTests
         var result = stream.IngestEvent(ValidIngestDto(50m));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActive);
     }
 
     [Fact]
@@ -346,7 +347,7 @@ public sealed class StreamAggregateTests
         var result = stream.Delete();
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_ALREADY_TERMINAL");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.AlreadyTerminal);
     }
 
     [Fact]
@@ -359,7 +360,7 @@ public sealed class StreamAggregateTests
         var result = stream.Delete();
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_ALREADY_TERMINAL");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.AlreadyTerminal);
     }
 
     [Fact]
@@ -372,6 +373,6 @@ public sealed class StreamAggregateTests
         var result = stream.IngestEvent(ValidIngestDto(75m));
 
         result.IsFailure.Should().BeTrue();
-        result.Errors.Should().ContainSingle(e => e.ErrorCode == "STREAM_NOT_ACTIVE");
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Stream.NotActive);
     }
 }
