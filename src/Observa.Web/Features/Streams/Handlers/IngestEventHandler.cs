@@ -19,7 +19,18 @@ public sealed class IngestEventHandler(IGrainFactory grains)
         CancellationToken ct)
     {
         var grain = grains.GetGrain<IStreamGrain>(agg.Id.Value);
-        await grain.WriteAsync(StreamGrainState.From(agg));
+        await grain.WriteAsync(StreamGrainState.From(agg), new ActivityLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = "EventIngested",
+            Message = $"Event ingested: {stepResult.Amount.Amount:F2} ({input.Source})",
+            Details = new Dictionary<string, string>
+            {
+                ["Amount"] = stepResult.Amount.Amount.ToString("F2"),
+                ["Source"] = input.Source.ToString(),
+                ["ExternalRef"] = input.ExternalRef ?? "",
+            },
+        });
         return Result.Success();
     }
 }

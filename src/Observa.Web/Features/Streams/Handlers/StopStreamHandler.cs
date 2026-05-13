@@ -19,7 +19,12 @@ public sealed class StopStreamHandler(IGrainFactory grains)
         CancellationToken ct)
     {
         var grain = grains.GetGrain<IStreamGrain>(agg.Id.Value);
-        await grain.WriteAsync(StreamGrainState.From(agg));
+        await grain.WriteAsync(StreamGrainState.From(agg), new ActivityLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = "Stopped",
+            Message = "Stream stopped (terminal)",
+        });
         await grain.RemoveConnectorPollReminderAsync();
         return Result.Success();
     }

@@ -34,8 +34,27 @@ public sealed class ConnectorPollOrchestrator(
         {
             logger.LogWarning("Connector '{ConnectorId}' not registered; stream {StreamId} cannot poll.",
                 state.Binding.ConnectorId, streamId);
+            await grain.LogActivityAsync(new ActivityLogEntry
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                Kind = "PollFailed",
+                Message = $"Connector '{state.Binding.ConnectorId}' is not registered.",
+            });
             return;
         }
+
+        await grain.LogActivityAsync(new ActivityLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = "PollStarted",
+            Message = $"Polling {connector.Metadata.DisplayName}",
+            Details = new Dictionary<string, string>
+            {
+                ["ConnectorId"] = connectorId.Value,
+                ["ExternalRef"] = state.Binding.ExternalRef,
+                ["Since"] = (state.Binding.LastSync ?? DateTimeOffset.UtcNow.AddDays(-30)).ToString("O"),
+            },
+        });
 
         IReadOnlyList<ConnectorFlowEvent> fetched;
         try
@@ -50,6 +69,12 @@ public sealed class ConnectorPollOrchestrator(
         {
             logger.LogError(ex, "Connector '{ConnectorId}' fetch failed for stream {StreamId}.",
                 state.Binding.ConnectorId, streamId);
+            await grain.LogActivityAsync(new ActivityLogEntry
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                Kind = "PollFailed",
+                Message = $"Fetch threw: {ex.GetType().Name}: {ex.Message}",
+            });
             return;
         }
 
@@ -57,6 +82,7 @@ public sealed class ConnectorPollOrchestrator(
         var service = scope.ServiceProvider.GetRequiredService<StreamService>();
 
         var ingestedCount = 0;
+        var duplicateCount = 0;
         foreach (var ev in fetched)
         {
             var result = await service.IngestEventAsync(
@@ -71,7 +97,10 @@ public sealed class ConnectorPollOrchestrator(
             }
 
             if (result.Errors.Any(e => e.ErrorCode == DomainErrors.FlowEvent.Duplicate))
+            {
+                duplicateCount++;
                 continue;
+            }
 
             logger.LogWarning("Stream {StreamId} ingest failed for external ref {ExternalRef}: {Errors}",
                 streamId, ev.ExternalEventId,
@@ -79,6 +108,19 @@ public sealed class ConnectorPollOrchestrator(
         }
 
         await grain.UpdateLastSyncAsync(DateTimeOffset.UtcNow);
+
+        await grain.LogActivityAsync(new ActivityLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = "PollCompleted",
+            Message = $"Fetched {fetched.Count}, ingested {ingestedCount}, dup-skipped {duplicateCount}.",
+            Details = new Dictionary<string, string>
+            {
+                ["Fetched"] = fetched.Count.ToString(),
+                ["Ingested"] = ingestedCount.ToString(),
+                ["DuplicatesSkipped"] = duplicateCount.ToString(),
+            },
+        });
 
         logger.LogInformation("Stream {StreamId} poll complete: fetched {Fetched}, ingested {Ingested}.",
             streamId, fetched.Count, ingestedCount);

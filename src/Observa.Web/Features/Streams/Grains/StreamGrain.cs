@@ -14,16 +14,27 @@ public sealed class StreamGrain(
 
     public Task<StreamGrainState> GetAsync() => Task.FromResult(state.State);
 
-    public async Task WriteAsync(StreamGrainState newState)
+    public async Task WriteAsync(StreamGrainState newState, ActivityLogEntry? logEntry = null)
     {
+        newState.ActivityLog = state.State.ActivityLog;
+        newState.LastConnectorPollAt = state.State.LastConnectorPollAt;
         state.State = newState;
+
+        if (logEntry is not null)
+            state.State.AppendActivityLog(logEntry);
+
+        await state.WriteStateAsync();
+    }
+
+    public async Task LogActivityAsync(ActivityLogEntry entry)
+    {
+        state.State.AppendActivityLog(entry);
         await state.WriteStateAsync();
     }
 
     public async Task EnsureConnectorPollReminderAsync(TimeSpan pollInterval)
     {
         if (pollInterval <= TimeSpan.Zero) return;
-
         await this.RegisterOrUpdateReminder(ConnectorPollReminderName, pollInterval, pollInterval);
     }
 
@@ -41,10 +52,20 @@ public sealed class StreamGrain(
         await state.WriteStateAsync();
     }
 
-    public Task ReceiveReminder(string reminderName, TickStatus status)
+    public async Task ReceiveReminder(string reminderName, TickStatus status)
     {
-        if (reminderName != ConnectorPollReminderName) return Task.CompletedTask;
+        if (reminderName != ConnectorPollReminderName) return;
         var streamId = this.GetPrimaryKey();
+        var now = DateTimeOffset.UtcNow;
+
+        state.State.LastConnectorPollAt = now;
+        state.State.AppendActivityLog(new ActivityLogEntry
+        {
+            Timestamp = now,
+            Kind = "ReminderFired",
+            Message = $"Connector poll reminder fired (TickStatus={status})",
+        });
+        await state.WriteStateAsync();
 
         _ = Task.Run(async () =>
         {
@@ -59,7 +80,5 @@ public sealed class StreamGrain(
                 logger.LogError(ex, "Connector poll failed for stream {StreamId}.", streamId);
             }
         });
-
-        return Task.CompletedTask;
     }
 }

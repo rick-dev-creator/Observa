@@ -10,6 +10,8 @@ namespace Observa.Features.Streams.Grains;
 [GenerateSerializer]
 public sealed class StreamGrainState
 {
+    private const int MaxActivityLogEntries = 100;
+
     [Id(0)] public Guid Id { get; set; }
     [Id(1)] public long Version { get; set; }
     [Id(2)] public string Name { get; set; } = "";
@@ -20,6 +22,15 @@ public sealed class StreamGrainState
     [Id(7)] public StreamStatus Status { get; set; }
     [Id(8)] public List<FlowEventSnapshot> Events { get; set; } = new();
     [Id(9)] public ConnectorBindingState? Binding { get; set; }
+    [Id(10)] public DateTimeOffset? LastConnectorPollAt { get; set; }
+    [Id(11)] public List<ActivityLogEntry> ActivityLog { get; set; } = new();
+
+    public void AppendActivityLog(ActivityLogEntry entry)
+    {
+        ActivityLog.Add(entry);
+        if (ActivityLog.Count > MaxActivityLogEntries)
+            ActivityLog.RemoveRange(0, ActivityLog.Count - MaxActivityLogEntries);
+    }
 
     public static StreamGrainState From(Aggregates.Stream agg) => new()
     {

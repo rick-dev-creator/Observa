@@ -19,7 +19,12 @@ public sealed class DeleteStreamHandler(IGrainFactory grains)
         CancellationToken ct)
     {
         var grain = grains.GetGrain<IStreamGrain>(agg.Id.Value);
-        await grain.WriteAsync(StreamGrainState.From(agg));
+        await grain.WriteAsync(StreamGrainState.From(agg), new ActivityLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = "Deleted",
+            Message = "Stream deleted (terminal)",
+        });
         await grain.RemoveConnectorPollReminderAsync();
         return Result.Success();
     }

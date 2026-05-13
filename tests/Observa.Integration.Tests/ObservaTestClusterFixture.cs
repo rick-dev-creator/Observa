@@ -2,6 +2,7 @@ using Crucible.Chains.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Observa.Connectors.Abstractions;
+using Observa.Features.Connectors.Catalog;
 using Observa.Features.Connectors.Manual;
 using Observa.Features.Connectors.Orchestration;
 using Observa.Features.Connectors.Recurring;
@@ -58,9 +59,11 @@ public sealed class ObservaTestClusterFixture : IAsyncLifetime
                 .AddCrucible()
                 .AddStreamAggregate()
                 .AddScoped<StreamService>()
+                .AddScoped<StreamQueryService>()
                 .AddSingleton<IConnector, ManualConnector>()
                 .AddSingleton<IConnector, RecurringConnector>()
-                .AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+                .AddSingleton<IConnectorRegistry, ConnectorRegistry>()
+                .AddSingleton<ConnectorCatalogService>();
         }
     }
 }

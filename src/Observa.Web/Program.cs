@@ -2,6 +2,7 @@ using Crucible.Chains.DependencyInjection;
 using Observa.Components;
 using Observa.Connectors.Abstractions;
 using Observa.Connectors.Patreon;
+using Observa.Features.Connectors.Catalog;
 using Observa.Features.Connectors.Manual;
 using Observa.Features.Connectors.Orchestration;
 using Observa.Features.Connectors.Recurring;
@@ -34,6 +35,8 @@ builder.UseOrleans(silo =>
 builder.Services.AddCrucible();
 builder.Services.AddStreamAggregate();
 builder.Services.AddScoped<StreamService>();
+builder.Services.AddScoped<StreamQueryService>();
+builder.Services.AddSingleton<ConnectorCatalogService>();
 
 builder.Services.AddSingleton<IConnector, ManualConnector>();
 builder.Services.AddSingleton<IConnector, RecurringConnector>();

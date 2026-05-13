@@ -21,7 +21,12 @@ public sealed class ResumeStreamHandler(IGrainFactory grains, IConnectorRegistry
         CancellationToken ct)
     {
         var grain = grains.GetGrain<IStreamGrain>(agg.Id.Value);
-        await grain.WriteAsync(StreamGrainState.From(agg));
+        await grain.WriteAsync(StreamGrainState.From(agg), new ActivityLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = "Resumed",
+            Message = "Stream resumed",
+        });
 
         if (agg.Binding is { } binding
             && connectors.Find(binding.ConnectorId) is { Metadata.PollInterval: var pi }

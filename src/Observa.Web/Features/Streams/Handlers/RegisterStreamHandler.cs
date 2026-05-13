@@ -1,6 +1,5 @@
 using Crucible.Chains.Handlers;
 using Crucible.Domain.Results;
-using Observa.Connectors.Abstractions;
 using Observa.Features.Connectors.Registry;
 using Observa.Features.Streams.Aggregates;
 using Stream = Observa.Features.Streams.Aggregates.Stream;
@@ -21,7 +20,25 @@ public sealed class RegisterStreamHandler(IGrainFactory grains, IConnectorRegist
         CancellationToken ct)
     {
         var grain = grains.GetGrain<IStreamGrain>(agg.Id.Value);
-        await grain.WriteAsync(StreamGrainState.From(agg));
+
+        var details = new Dictionary<string, string>
+        {
+            ["Direction"] = agg.Direction.ToString(),
+            ["Category"] = agg.Category,
+            ["Connector"] = agg.Binding?.ConnectorId.Value ?? "none",
+        };
+        if (agg.Schedule is { } sched)
+            details["Schedule"] = $"{sched.Cadence}/{sched.Anchor}";
+        if (agg.ExpectedAmount is { } exp)
+            details["ExpectedAmount"] = exp.Amount.ToString("F2");
+
+        await grain.WriteAsync(StreamGrainState.From(agg), new ActivityLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            Kind = "Registered",
+            Message = $"Stream '{agg.Name}' registered",
+            Details = details,
+        });
 
         if (agg.Binding is { } binding
             && connectors.Find(binding.ConnectorId) is { Metadata.PollInterval: var pi }
@@ -29,6 +46,9 @@ public sealed class RegisterStreamHandler(IGrainFactory grains, IConnectorRegist
         {
             await grain.EnsureConnectorPollReminderAsync(pi);
         }
+
+        var index = grains.GetGrain<IStreamIndexGrain>(StreamIndexGrain.SingletonKey);
+        await index.AddAsync(agg.Id.Value);
 
         return Result.Success();
     }
