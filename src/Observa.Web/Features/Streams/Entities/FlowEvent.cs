@@ -1,7 +1,10 @@
 using Crucible.Domain.Aggregates;
 using Crucible.Domain.Attributes;
+using Observa.Features.Streams.Enums;
+using Observa.Features.Streams.Identifiers;
+using Observa.Features.Streams.ValueObjects;
 
-namespace Observa.Features.Streams;
+namespace Observa.Features.Streams.Entities;
 
 [Entity]
 public partial class FlowEvent : Entity<FlowEventId>

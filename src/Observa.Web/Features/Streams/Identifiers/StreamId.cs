@@ -1,6 +1,6 @@
 using Crucible.Domain.Identifiers;
 
-namespace Observa.Features.Streams;
+namespace Observa.Features.Streams.Identifiers;
 
 public readonly record struct StreamId(Guid Value) : IAggregateId<StreamId>
 {

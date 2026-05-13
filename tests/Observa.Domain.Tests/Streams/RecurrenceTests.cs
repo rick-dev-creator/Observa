@@ -1,5 +1,6 @@
 using FluentAssertions;
-using Observa.Features.Streams;
+using Observa.Features.Streams.Enums;
+using Observa.Features.Streams.ValueObjects;
 
 namespace Observa.Domain.Tests.Streams;
 

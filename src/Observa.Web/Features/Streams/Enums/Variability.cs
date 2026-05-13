@@ -1,4 +1,4 @@
-namespace Observa.Features.Streams;
+namespace Observa.Features.Streams.Enums;
 
 public enum Variability
 {

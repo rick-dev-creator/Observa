@@ -1,6 +1,6 @@
 using Crucible.Domain.Errors;
 using FluentAssertions;
-using Observa.Features.Streams;
+using Observa.Features.Streams.ValueObjects;
 
 namespace Observa.Domain.Tests.Streams;
 

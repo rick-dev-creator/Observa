@@ -1,9 +1,11 @@
 using Crucible.Domain.Errors;
 using FluentAssertions;
-using Observa.Features.Streams;
+using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Dtos;
+using Observa.Features.Streams.Enums;
 using Observa.Features.Streams.Events;
-using Stream = Observa.Features.Streams.Stream;
+using Observa.Features.Streams.ValueObjects;
+using Stream = Observa.Features.Streams.Aggregates.Stream;
 
 namespace Observa.Domain.Tests.Streams;
 

@@ -1,4 +1,6 @@
 using Crucible.Domain.Events;
+using Observa.Features.Streams.Enums;
+using Observa.Features.Streams.Identifiers;
 
 namespace Observa.Features.Streams.Events;
 

@@ -3,9 +3,13 @@ using Crucible.Domain.Attributes;
 using Crucible.Domain.Errors;
 using Crucible.Domain.Results;
 using Observa.Features.Streams.Dtos;
+using Observa.Features.Streams.Entities;
+using Observa.Features.Streams.Enums;
 using Observa.Features.Streams.Events;
+using Observa.Features.Streams.Identifiers;
+using Observa.Features.Streams.ValueObjects;
 
-namespace Observa.Features.Streams;
+namespace Observa.Features.Streams.Aggregates;
 
 [Aggregate]
 public partial class Stream : AggregateRoot<StreamId>

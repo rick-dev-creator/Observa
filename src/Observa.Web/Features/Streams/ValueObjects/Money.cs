@@ -3,7 +3,7 @@ using Crucible.Domain.Attributes;
 using Crucible.Domain.Errors;
 using Crucible.Domain.Results;
 
-namespace Observa.Features.Streams;
+namespace Observa.Features.Streams.ValueObjects;
 
 [ValueObject]
 public sealed partial record Money : ValueObject

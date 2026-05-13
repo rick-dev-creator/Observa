@@ -2,8 +2,9 @@ using Crucible.Domain.Aggregates;
 using Crucible.Domain.Attributes;
 using Crucible.Domain.Errors;
 using Crucible.Domain.Results;
+using Observa.Features.Streams.Enums;
 
-namespace Observa.Features.Streams;
+namespace Observa.Features.Streams.ValueObjects;
 
 [ValueObject]
 public sealed partial record Recurrence : ValueObject
