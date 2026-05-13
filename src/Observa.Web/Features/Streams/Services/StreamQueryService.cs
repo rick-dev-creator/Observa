@@ -54,11 +54,6 @@ public sealed class StreamQueryService(IGrainFactory grains, IConnectorRegistry 
             .ToList();
     }
 
-    public async Task<StreamGrainState?> GetRawAsync(StreamId id, CancellationToken ct)
-    {
-        var state = await grains.GetGrain<IStreamGrain>(id.Value).GetAsync();
-        return state.Id == Guid.Empty ? null : state;
-    }
 
     private StreamOperationsView MapOperations(StreamGrainState state)
     {
