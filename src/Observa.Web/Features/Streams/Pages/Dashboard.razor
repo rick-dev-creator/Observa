@@ -167,7 +167,7 @@ else
             <h2 class="text-sm uppercase tracking-wide text-zinc-400">Running balance</h2>
             <p class="text-xs text-zinc-500">Cumulative net · solid is history, area continues into 6-month forecast</p>
         </div>
-        <CumulativeBalanceChart Data="_balance" />
+        <CumulativeBalanceChart @key="@($"b-{_filterKey}")" Data="_balance" />
     </section>
 
     @if (_yearlyByStream.Count > 0)
@@ -177,7 +177,7 @@ else
                 <h2 class="text-sm uppercase tracking-wide text-zinc-400">Yearly trend</h2>
                 <p class="text-xs text-zinc-500">Stacked by stream · income above zero, outcome below</p>
             </div>
-            <YearlyStreamBars Data="_yearlyByStream" />
+            <YearlyStreamBars @key="@($"y-{_filterKey}")" Data="_yearlyByStream" />
         </section>
     }
 
@@ -188,7 +188,7 @@ else
                 <h2 class="text-sm uppercase tracking-wide text-zinc-400">Monthly contribution — last 12 months</h2>
                 <p class="text-xs text-zinc-500">Stacked by stream · income above zero, outcome below</p>
             </div>
-            <MonthlyStreamBars Data="_historyByStream" />
+            <MonthlyStreamBars @key="@($"m-{_filterKey}")" Data="_historyByStream" />
         </section>
     }
 
@@ -330,6 +330,7 @@ else
     private IReadOnlyList<MonthlyStreamPointView> _historyByStream = [];
     private IReadOnlyList<YearlyStreamPointView> _yearlyByStream = [];
     private IReadOnlyCollection<Guid>? _filter;
+    private string _filterKey = "init";
 
     protected override async Task OnInitializedAsync()
     {
@@ -360,6 +361,7 @@ else
     {
         _filter = selection;
         await LoadAnalyticsAsync();
+        _filterKey = $"{selection.Count}-{string.Join(",", selection.OrderBy(g => g))}";
     }
 
     private string TabClass(int idx) =>

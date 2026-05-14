@@ -175,15 +175,22 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
 
     private static IReadOnlyList<YearlyStreamPointView> ComputeYearlyHistoryByStream(IReadOnlyList<StreamGrainState> states)
     {
+        if (states.Count == 0) return Array.Empty<YearlyStreamPointView>();
+
+        var allYears = states.SelectMany(s => s.Events.Select(e => e.OccurredAt.Year)).ToList();
+        if (allYears.Count == 0) return Array.Empty<YearlyStreamPointView>();
+        var minYear = allYears.Min();
+        var maxYear = Math.Max(allYears.Max(), DateTimeOffset.UtcNow.Year);
+
         var output = new List<YearlyStreamPointView>();
         foreach (var s in states)
         {
             var buckets = new SortedDictionary<int, decimal>();
+            for (var y = minYear; y <= maxYear; y++) buckets[y] = 0m;
+
             foreach (var e in s.Events)
-            {
-                buckets.TryGetValue(e.OccurredAt.Year, out var amt);
-                buckets[e.OccurredAt.Year] = amt + e.Amount.Amount;
-            }
+                buckets[e.OccurredAt.Year] += e.Amount.Amount;
+
             foreach (var (year, amount) in buckets)
             {
                 output.Add(new YearlyStreamPointView(

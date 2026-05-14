@@ -41,29 +41,33 @@
         }
     }
 
-    private async Task Toggle(Guid id)
+    private Task Toggle(Guid id)
     {
-        if (!_selected.Add(id)) _selected.Remove(id);
-        await SelectionChanged.InvokeAsync(_selected);
+        _selected = _selected.Contains(id)
+            ? new HashSet<Guid>(_selected.Where(x => x != id))
+            : new HashSet<Guid>(_selected) { id };
+        return Emit();
     }
 
-    private async Task SelectAll()
+    private Task SelectAll()
     {
         _selected = Streams.Select(s => s.Id).ToHashSet();
-        await SelectionChanged.InvokeAsync(_selected);
+        return Emit();
     }
 
-    private async Task ClearAll()
+    private Task ClearAll()
     {
-        _selected.Clear();
-        await SelectionChanged.InvokeAsync(_selected);
+        _selected = new HashSet<Guid>();
+        return Emit();
     }
 
-    private async Task SelectDirection(Direction direction)
+    private Task SelectDirection(Direction direction)
     {
         _selected = Streams.Where(s => s.Direction == direction).Select(s => s.Id).ToHashSet();
-        await SelectionChanged.InvokeAsync(_selected);
+        return Emit();
     }
+
+    private Task Emit() => SelectionChanged.InvokeAsync(new HashSet<Guid>(_selected));
 
     private static string ChipClass(StreamSummaryView s, bool on)
     {
