@@ -13,7 +13,7 @@ public sealed class RecurrenceTests
     [InlineData(Cadence.Monthly, 31)]
     public void Create_MonthlyWithValidAnchor_Succeeds(Cadence cadence, int anchor)
     {
-        var result = Recurrence.Create(cadence, anchor, Variability.Fixed);
+        var result = Recurrence.Create(cadence, anchor, Variability.Fixed, null);
 
         result.IsSuccess.Should().BeTrue();
     }
@@ -24,7 +24,7 @@ public sealed class RecurrenceTests
     [InlineData(-1)]
     public void Create_MonthlyWithInvalidAnchor_Fails(int anchor)
     {
-        var result = Recurrence.Create(Cadence.Monthly, anchor, Variability.Fixed);
+        var result = Recurrence.Create(Cadence.Monthly, anchor, Variability.Fixed, null);
 
         result.IsFailure.Should().BeTrue();
         result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.Recurrence.MonthlyAnchorRange);
@@ -36,7 +36,7 @@ public sealed class RecurrenceTests
     [InlineData(Cadence.Biweekly, 3)]
     public void Create_WeeklyOrBiweeklyWithValidAnchor_Succeeds(Cadence cadence, int anchor)
     {
-        var result = Recurrence.Create(cadence, anchor, Variability.Variable);
+        var result = Recurrence.Create(cadence, anchor, Variability.Variable, null);
 
         result.IsSuccess.Should().BeTrue();
     }
@@ -48,7 +48,7 @@ public sealed class RecurrenceTests
     [InlineData(Cadence.Biweekly, 8)]
     public void Create_WeeklyOrBiweeklyWithInvalidAnchor_Fails(Cadence cadence, int anchor)
     {
-        var result = Recurrence.Create(cadence, anchor, Variability.Fixed);
+        var result = Recurrence.Create(cadence, anchor, Variability.Fixed, null);
 
         result.IsFailure.Should().BeTrue();
     }
@@ -58,7 +58,7 @@ public sealed class RecurrenceTests
     [InlineData(Cadence.OneOff)]
     public void Create_IrregularOrOneOff_AnyAnchorSucceeds(Cadence cadence)
     {
-        var result = Recurrence.Create(cadence, 999, Variability.Variable);
+        var result = Recurrence.Create(cadence, 999, Variability.Variable, null);
 
         result.IsSuccess.Should().BeTrue();
     }

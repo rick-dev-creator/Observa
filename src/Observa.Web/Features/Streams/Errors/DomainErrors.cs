@@ -35,5 +35,6 @@ public static class DomainErrors
         public const string MonthlyAnchorRange = "RECURRENCE_MONTHLY_ANCHOR_RANGE";
         public const string WeeklyAnchorRange = "RECURRENCE_WEEKLY_ANCHOR_RANGE";
         public const string BiweeklyAnchorRange = "RECURRENCE_BIWEEKLY_ANCHOR_RANGE";
+        public const string StartFromInFuture = "RECURRENCE_START_FROM_IN_FUTURE";
     }
 }

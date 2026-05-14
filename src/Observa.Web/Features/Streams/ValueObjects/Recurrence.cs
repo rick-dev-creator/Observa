@@ -13,10 +13,11 @@ public sealed partial record Recurrence : ValueObject
     public Cadence Cadence { get; init; }
     public int Anchor { get; init; }
     public Variability Variability { get; init; }
+    public DateTimeOffset? StartFrom { get; init; }
 
     private Recurrence() { }
 
-    private static partial Result __ValidateConstruction(Cadence cadence, int anchor, Variability variability)
+    private static partial Result __ValidateConstruction(Cadence cadence, int anchor, Variability variability, DateTimeOffset? startFrom)
     {
         var errors = new List<IError>();
 
@@ -41,6 +42,12 @@ public sealed partial record Recurrence : ValueObject
                     nameof(Anchor)));
                 break;
         }
+
+        if (startFrom is { } from && from > DateTimeOffset.UtcNow)
+            errors.Add(new ValidationError(
+                DomainErrors.Recurrence.StartFromInFuture,
+                "StartFrom cannot be in the future; use null to start at the first poll.",
+                nameof(StartFrom)));
 
         return errors.Count > 0 ? Result.Failure(errors) : Result.Success();
     }

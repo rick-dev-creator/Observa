@@ -39,7 +39,8 @@
         @bind-HasSchedule="_form.HasSchedule"
         @bind-Cadence="_form.Cadence"
         @bind-Anchor="_form.Anchor"
-        @bind-Variability="_form.Variability" />
+        @bind-Variability="_form.Variability"
+        @bind-StartFrom="_form.StartFrom" />
 
     <div class="border-t border-zinc-800 pt-4">
         <label class="block text-xs text-zinc-500 mb-1">Connector (data source)</label>
@@ -94,7 +95,10 @@
         Recurrence? schedule = null;
         if (_form.HasSchedule)
         {
-            var r = Recurrence.Create(_form.Cadence, _form.Anchor, _form.Variability);
+            DateTimeOffset? startFrom = _form.StartFrom is { } d
+                ? new DateTimeOffset(d, TimeSpan.Zero)
+                : null;
+            var r = Recurrence.Create(_form.Cadence, _form.Anchor, _form.Variability, startFrom);
             if (r.IsFailure) { _errors = r.Errors.Select(e => (e.ErrorCode, e.ErrorDescription)).ToList(); _submitting = false; return; }
             schedule = r.Value;
         }
@@ -133,6 +137,7 @@
         public Cadence Cadence { get; set; } = Cadence.Monthly;
         public int Anchor { get; set; } = 1;
         public Variability Variability { get; set; } = Variability.Fixed;
+        public DateTime? StartFrom { get; set; }
         public string? ConnectorId { get; set; }
         public string? ExternalRef { get; set; }
     }

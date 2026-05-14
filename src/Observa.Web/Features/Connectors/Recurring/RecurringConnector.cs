@@ -26,7 +26,9 @@ public sealed class RecurringConnector(IGrainFactory grains) : IConnector
         if (state.Schedule is null || state.ExpectedAmount is null)
             return [];
 
-        var since = context.Since ?? DateTimeOffset.UtcNow.AddDays(-30);
+        var since = context.Since
+            ?? state.Schedule.StartFrom
+            ?? DateTimeOffset.UtcNow.AddDays(-30);
         var occurrences = ComputeOccurrences(state.Schedule, since, DateTimeOffset.UtcNow);
         return occurrences
             .Select(date => new ConnectorFlowEvent(

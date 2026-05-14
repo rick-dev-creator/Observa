@@ -60,7 +60,7 @@ public sealed class StreamSeedService(
 
         foreach (var item in StreamSeedCatalog.Build())
         {
-            var schedule = Recurrence.Create(Cadence.Monthly, item.AnchorDay, item.Variability).Match(
+            var schedule = Recurrence.Create(Cadence.Monthly, item.AnchorDay, item.Variability, SeedStart).Match(
                 r => r,
                 _ => throw new InvalidOperationException("seed: invalid Recurrence"));
 

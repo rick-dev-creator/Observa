@@ -31,6 +31,15 @@
                 </select>
             </div>
         </div>
+
+        <div class="pl-6 mt-3">
+            <label class="block text-xs text-zinc-500 mb-1">Backfill from (optional)</label>
+            <input type="date" class="@FieldCss max-w-xs" @bind="StartFrom" @bind:after="EmitChange" />
+            <p class="text-xs text-zinc-600 mt-1">
+                Leave blank to start emitting from the first poll. Pick a past date to
+                generate every scheduled occurrence from that date up to today.
+            </p>
+        </div>
     }
 </div>
 
@@ -46,6 +55,8 @@
     [Parameter] public EventCallback<int> AnchorChanged { get; set; }
     [Parameter] public Variability Variability { get; set; } = Variability.Fixed;
     [Parameter] public EventCallback<Variability> VariabilityChanged { get; set; }
+    [Parameter] public DateTime? StartFrom { get; set; }
+    [Parameter] public EventCallback<DateTime?> StartFromChanged { get; set; }
 
     private string AnchorHint => Cadence switch
     {
@@ -60,5 +71,6 @@
         await CadenceChanged.InvokeAsync(Cadence);
         await AnchorChanged.InvokeAsync(Anchor);
         await VariabilityChanged.InvokeAsync(Variability);
+        await StartFromChanged.InvokeAsync(StartFrom);
     }
 }
