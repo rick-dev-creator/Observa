@@ -8,9 +8,16 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddPatreonConnectors(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddHttpClient<PatreonApiClient>();
-
         var accounts = configuration.GetSection(PatreonOptions.SectionName).Get<PatreonOptions[]>() ?? [];
+
+        services.AddHttpClient<PatreonApiClient>(http =>
+        {
+            var baseUrl = accounts.FirstOrDefault()?.ApiBaseUrl ?? "https://www.patreon.com/api/oauth2/v2/";
+            http.BaseAddress = new Uri(baseUrl);
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var options in accounts)

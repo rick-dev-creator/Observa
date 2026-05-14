@@ -36,5 +36,9 @@ public sealed class PatreonConnector : IConnector
     public Task<IReadOnlyList<ConnectorFlowEvent>> FetchEventsAsync(
         ConnectorFetchContext context,
         CancellationToken ct) =>
-        _api.FetchPledgesAsync(context.ExternalRef, _options.AccessToken ?? "", context.Since, ct);
+        _api.FetchPledgesAsync(
+            campaignId: context.ExternalRef,
+            accessToken: _options.AccessToken ?? "",
+            since: context.Since,
+            ct);
 }

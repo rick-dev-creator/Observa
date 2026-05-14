@@ -52,7 +52,7 @@ public sealed class ConnectorPollOrchestrator(
             {
                 ["ConnectorId"] = connectorId.Value,
                 ["ExternalRef"] = state.Binding.ExternalRef,
-                ["Since"] = (state.Binding.LastSync ?? DateTimeOffset.UtcNow.AddDays(-30)).ToString("O"),
+                ["Since"] = state.Binding.LastSync?.ToString("O") ?? "(initial backfill)",
             },
         });
 
@@ -62,7 +62,7 @@ public sealed class ConnectorPollOrchestrator(
             var fetchContext = new ConnectorFetchContext(
                 CallerId: streamId,
                 ExternalRef: state.Binding.ExternalRef,
-                Since: state.Binding.LastSync ?? DateTimeOffset.UtcNow.AddDays(-30));
+                Since: state.Binding.LastSync);
             fetched = await connector.FetchEventsAsync(fetchContext, ct);
         }
         catch (Exception ex)

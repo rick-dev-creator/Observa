@@ -1,7 +1,7 @@
 using Crucible.Chains.Handlers;
 using Crucible.Domain.Results;
+using Observa.Features.Connectors.Orchestration;
 using Observa.Features.Connectors.Registry;
-using Observa.Features.Streams.Aggregates;
 using Stream = Observa.Features.Streams.Aggregates.Stream;
 using Observa.Features.Streams.Dtos;
 using Observa.Features.Streams.Events;
@@ -10,7 +10,11 @@ using Observa.Features.Streams.Identifiers;
 
 namespace Observa.Features.Streams.Handlers;
 
-public sealed class RegisterStreamHandler(IGrainFactory grains, IConnectorRegistry connectors)
+public sealed class RegisterStreamHandler(
+    IGrainFactory grains,
+    IConnectorRegistry connectors,
+    IServiceScopeFactory scopeFactory,
+    ILogger<RegisterStreamHandler> logger)
     : IStepHandler<Stream, StreamId, RegisterStreamDto, StreamRegistered>
 {
     public async Task<Result> InvokeAsync(
@@ -45,6 +49,7 @@ public sealed class RegisterStreamHandler(IGrainFactory grains, IConnectorRegist
             && pi > TimeSpan.Zero)
         {
             await grain.EnsureConnectorPollReminderAsync(pi);
+            KickOffInitialPoll(agg.Id.Value);
         }
 
         var index = grains.GetGrain<IStreamIndexGrain>(StreamIndexGrain.SingletonKey);
@@ -52,4 +57,20 @@ public sealed class RegisterStreamHandler(IGrainFactory grains, IConnectorRegist
 
         return Result.Success();
     }
+
+    private void KickOffInitialPoll(Guid streamId) =>
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ConnectorPollOrchestrator>();
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                await orchestrator.PollAsync(streamId, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Initial connector poll failed for stream {StreamId}.", streamId);
+            }
+        });
 }
