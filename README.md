@@ -49,15 +49,8 @@ src/
 - .NET 10 SDK
 - Node.js 20+ (for the Tailwind CLI invoked during build)
 - Docker or Podman (for the Aspire-managed PostgreSQL container)
-- [Crucible](https://github.com/rick-dev-creator/crucible) cloned as a sibling directory:
 
-```
-~/Projects/
-├── crucible/        <-- required sibling
-└── Observa/        <-- this repo
-```
-
-While Crucible is pre-1.0 it is consumed via `ProjectReference`. Once published to NuGet the references will switch to `PackageReference`.
+[Crucible](https://www.nuget.org/packages?q=Crucible) is consumed via NuGet (`Crucible.Domain`, `Crucible.Chains`, `Crucible.Generators` at v2.2.0) — no sibling clone required.
 
 ## Building
 

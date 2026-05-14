@@ -12,14 +12,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Observa.ServiceDefaults\Observa.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\crucible\src\Crucible.Domain\Crucible.Domain.csproj" />
-    <ProjectReference Include="..\..\..\crucible\src\Crucible.Chains\Crucible.Chains.csproj" />
-    <ProjectReference Include="..\..\..\crucible\src\Crucible.Generators\Crucible.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Observa.Connectors.Abstractions\Observa.Connectors.Abstractions.csproj" />
     <ProjectReference Include="..\Observa.Connectors.Patreon\Observa.Connectors.Patreon.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Crucible.Domain" Version="2.2.0" />
+    <PackageReference Include="Crucible.Chains" Version="2.2.0" />
+    <PackageReference Include="Crucible.Generators" Version="2.2.0">
+      <IncludeAssets>analyzers</IncludeAssets>
+      <PrivateAssets>contentfiles;build</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
     <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1" />
     <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="9.2.1" />
