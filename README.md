@@ -113,6 +113,10 @@ cd src/Observa.Web
 npm run css:watch
 ```
 
+## Roadmap
+
+What's shipped, what's queued next, and what is deliberately deferred lives in [ROADMAP.md](ROADMAP.md).
+
 ## Authorship
 
 Design, architecture, and direction by [rick-dev-creator](https://github.com/rick-dev-creator). Code written by Claude (Anthropic) under the constraints of [Crucible](https://github.com/rick-dev-creator/crucible) and an explicit per-iteration review loop.
