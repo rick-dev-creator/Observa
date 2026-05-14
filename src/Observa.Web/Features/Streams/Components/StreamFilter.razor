@@ -1,0 +1,77 @@
+<div class="border border-zinc-800 rounded p-3 sm:p-4 mb-6">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p class="text-xs uppercase tracking-wide text-zinc-500">
+            Streams in view <span class="text-zinc-300">@_selected.Count</span> / @Streams.Count
+        </p>
+        <div class="flex gap-2 text-xs">
+            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="SelectAll">Select all</button>
+            <span class="text-zinc-700">|</span>
+            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="ClearAll">Clear</button>
+            <span class="text-zinc-700">|</span>
+            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Income))">Income only</button>
+            <span class="text-zinc-700">|</span>
+            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Outcome))">Outcome only</button>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        @foreach (var s in Streams)
+        {
+            var on = _selected.Contains(s.Id);
+            <button type="button"
+                    class="@ChipClass(s, on)"
+                    @onclick="@(() => Toggle(s.Id))">
+                @s.Name
+                <span class="text-xs opacity-70 ml-1">@(s.Direction == Direction.Income ? "+" : "−")</span>
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StreamSummaryView> Streams { get; set; } = [];
+    [Parameter] public EventCallback<IReadOnlyCollection<Guid>> SelectionChanged { get; set; }
+
+    private HashSet<Guid> _selected = new();
+
+    protected override void OnParametersSet()
+    {
+        if (_selected.Count == 0 && Streams.Count > 0)
+        {
+            _selected = Streams.Select(s => s.Id).ToHashSet();
+        }
+    }
+
+    private async Task Toggle(Guid id)
+    {
+        if (!_selected.Add(id)) _selected.Remove(id);
+        await SelectionChanged.InvokeAsync(_selected);
+    }
+
+    private async Task SelectAll()
+    {
+        _selected = Streams.Select(s => s.Id).ToHashSet();
+        await SelectionChanged.InvokeAsync(_selected);
+    }
+
+    private async Task ClearAll()
+    {
+        _selected.Clear();
+        await SelectionChanged.InvokeAsync(_selected);
+    }
+
+    private async Task SelectDirection(Direction direction)
+    {
+        _selected = Streams.Where(s => s.Direction == direction).Select(s => s.Id).ToHashSet();
+        await SelectionChanged.InvokeAsync(_selected);
+    }
+
+    private static string ChipClass(StreamSummaryView s, bool on)
+    {
+        var baseCls = "px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors";
+        if (!on)
+            return $"{baseCls} bg-zinc-900 text-zinc-500 border border-zinc-800 hover:border-zinc-600";
+        return s.Direction == Direction.Income
+            ? $"{baseCls} bg-emerald-900/40 text-emerald-200 border border-emerald-700/50"
+            : $"{baseCls} bg-rose-900/40 text-rose-200 border border-rose-700/50";
+    }
+}

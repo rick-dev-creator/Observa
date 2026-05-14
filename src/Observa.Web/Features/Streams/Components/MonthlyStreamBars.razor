@@ -1,0 +1,83 @@
+@using ApexCharts
+
+<div class="w-full">
+    <ApexChart TItem="MonthlyStreamPointView"
+               Options="@_options"
+               Height="320"
+               Debug="false">
+
+        @foreach (var (streamId, name, direction) in _seriesOrder)
+        {
+            <ApexPointSeries TItem="MonthlyStreamPointView"
+                             Items="@_byStream[streamId]"
+                             Name="@name"
+                             SeriesType="SeriesType.Bar"
+                             XValue="@(p => p.Label)"
+                             YValue="@(p => direction == Direction.Income ? p.Amount : -p.Amount)" />
+        }
+    </ApexChart>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<MonthlyStreamPointView> Data { get; set; } = [];
+
+    private ApexChartOptions<MonthlyStreamPointView> _options = null!;
+    private Dictionary<Guid, List<MonthlyStreamPointView>> _byStream = new();
+    private List<(Guid StreamId, string Name, Direction Direction)> _seriesOrder = new();
+
+    protected override void OnParametersSet()
+    {
+        _byStream = Data
+            .GroupBy(p => p.StreamId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(p => p.Year).ThenBy(p => p.Month).ToList());
+
+        _seriesOrder = Data
+            .GroupBy(p => (p.StreamId, p.StreamName, p.Direction))
+            .Select(g => (g.Key.StreamId, g.Key.StreamName, g.Key.Direction))
+            .OrderByDescending(t => t.Direction == Direction.Income)
+            .ThenBy(t => t.StreamName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _options = new ApexChartOptions<MonthlyStreamPointView>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                ForeColor = "#a1a1aa",
+                Toolbar = new Toolbar { Show = false },
+                Animations = new Animations { Enabled = true, Speed = 400 },
+                Stacked = true,
+                FontFamily = "ui-sans-serif, system-ui",
+            },
+            PlotOptions = new PlotOptions
+            {
+                Bar = new PlotOptionsBar { ColumnWidth = "60%", BorderRadius = 2 }
+            },
+            DataLabels = new DataLabels { Enabled = false },
+            Stroke = new Stroke { Width = new List<double> { 0 } },
+            Grid = new Grid { BorderColor = "#27272a", StrokeDashArray = 3 },
+            Xaxis = new XAxis
+            {
+                AxisBorder = new AxisBorder { Color = "#27272a" },
+                AxisTicks = new AxisTicks { Color = "#27272a" },
+            },
+            Yaxis = new List<YAxis>
+            {
+                new()
+                {
+                    Labels = new YAxisLabels
+                    {
+                        Formatter = "function(val) { return '$' + Math.round(Math.abs(val)).toLocaleString('en-US'); }",
+                    },
+                },
+            },
+            Tooltip = new Tooltip
+            {
+                Theme = Mode.Dark,
+                Shared = true,
+                Y = new TooltipY { Formatter = "function(val) { return '$' + Math.round(Math.abs(val)).toLocaleString('en-US'); }" },
+            },
+            Legend = new Legend { Position = LegendPosition.Top, HorizontalAlign = Align.Right },
+        };
+    }
+}

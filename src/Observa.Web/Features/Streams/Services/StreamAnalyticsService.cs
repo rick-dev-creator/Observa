@@ -9,46 +9,78 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
     private const decimal VolatilityThreshold = 0.30m; // stddev/mean > 30% → Volatile
     private const decimal SteadyThresholdPctOfAvg = 0.05m;
 
-    public async Task<MonthSummaryView> GetCurrentMonthAsync(CancellationToken ct)
+    public async Task<MonthSummaryView> GetCurrentMonthAsync(CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
-        var states = await LoadAllAsync(ct);
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
         return ComputeCurrentMonth(states);
     }
 
-    public async Task<IReadOnlyList<MonthlyAggregateView>> GetMonthlyHistoryAsync(int months, CancellationToken ct)
+    public async Task<IReadOnlyList<MonthlyAggregateView>> GetMonthlyHistoryAsync(int months, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
-        var states = await LoadAllAsync(ct);
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
         return ComputeMonthlyHistory(states, months);
     }
 
-    public async Task<IReadOnlyList<StreamTrendView>> GetStreamTrendsAsync(int sparklineMonths, CancellationToken ct)
+    public async Task<IReadOnlyList<MonthlyStreamPointView>> GetMonthlyHistoryByStreamAsync(int months, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
-        var states = await LoadAllAsync(ct);
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        return ComputeMonthlyHistoryByStream(states, months);
+    }
+
+    public async Task<IReadOnlyList<StreamTrendView>> GetStreamTrendsAsync(int sparklineMonths, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
         return ComputeStreamTrends(states, sparklineMonths);
     }
 
-    public async Task<ProjectionView> GetProjectionAsync(CancellationToken ct)
+    public async Task<ProjectionView> GetProjectionAsync(CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
-        var states = await LoadAllAsync(ct);
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
         return ComputeProjection(states);
     }
 
-    public async Task<RetrospectiveView> GetRetrospectiveAsync(CancellationToken ct)
+    public async Task<RetrospectiveView> GetRetrospectiveAsync(CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
-        var states = await LoadAllAsync(ct);
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
         return ComputeRetrospective(states);
     }
 
-    public async Task<IReadOnlyList<CumulativeBalancePointView>> GetCumulativeBalanceAsync(int futureMonths, CancellationToken ct)
+    public async Task<IReadOnlyList<CumulativeBalancePointView>> GetCumulativeBalanceAsync(int futureMonths, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
-        var states = await LoadAllAsync(ct);
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
         return ComputeCumulativeBalance(states, futureMonths);
     }
 
-    public async Task<IReadOnlyList<YearlyAggregateView>> GetYearlyHistoryAsync(CancellationToken ct)
+    public async Task<IReadOnlyList<YearlyAggregateView>> GetYearlyHistoryAsync(CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        return ComputeYearlyHistory(states);
+    }
+
+    public async Task<IReadOnlyList<YearlyStreamPointView>> GetYearlyHistoryByStreamAsync(CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        return ComputeYearlyHistoryByStream(states);
+    }
+
+    public async Task<IReadOnlyList<StreamSummaryView>> GetStreamSummariesAsync(CancellationToken ct)
     {
         var states = await LoadAllAsync(ct);
-        return ComputeYearlyHistory(states);
+        return states
+            .OrderByDescending(s => s.Direction == Direction.Income)
+            .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(s => new StreamSummaryView(s.Id, s.Name, s.Category, s.Direction, s.Status))
+            .ToList();
+    }
+
+    private static IReadOnlyList<StreamGrainState> ApplyFilter(
+        IReadOnlyList<StreamGrainState> states,
+        IReadOnlyCollection<Guid>? streamFilter)
+    {
+        if (streamFilter is null) return states;
+        if (streamFilter.Count == 0) return Array.Empty<StreamGrainState>();
+        var set = streamFilter as HashSet<Guid> ?? new HashSet<Guid>(streamFilter);
+        return states.Where(s => set.Contains(s.Id)).ToList();
     }
 
     public async Task<WhatIfResultView> GetWhatIfAsync(Scenario scenario, CancellationToken ct)
@@ -101,6 +133,68 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             ScenarioProjection: ComputeProjection(modified),
             NetSeries: series,
             StreamImpacts: impacts);
+    }
+
+    private static IReadOnlyList<MonthlyStreamPointView> ComputeMonthlyHistoryByStream(IReadOnlyList<StreamGrainState> states, int months)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var floor = anchor.AddMonths(-(months - 1));
+
+        var output = new List<MonthlyStreamPointView>();
+        foreach (var s in states)
+        {
+            var buckets = new SortedDictionary<(int Y, int M), decimal>();
+            for (var i = months - 1; i >= 0; i--)
+            {
+                var d = anchor.AddMonths(-i);
+                buckets[(d.Year, d.Month)] = 0m;
+            }
+
+            foreach (var e in s.Events)
+            {
+                if (e.OccurredAt < floor) continue;
+                var key = (e.OccurredAt.Year, e.OccurredAt.Month);
+                if (!buckets.ContainsKey(key)) continue;
+                buckets[key] += e.Amount.Amount;
+            }
+
+            foreach (var (key, amount) in buckets)
+            {
+                output.Add(new MonthlyStreamPointView(
+                    Year: key.Y,
+                    Month: key.M,
+                    StreamId: s.Id,
+                    StreamName: s.Name,
+                    Direction: s.Direction,
+                    Amount: Math.Round(amount, 2)));
+            }
+        }
+        return output;
+    }
+
+    private static IReadOnlyList<YearlyStreamPointView> ComputeYearlyHistoryByStream(IReadOnlyList<StreamGrainState> states)
+    {
+        var output = new List<YearlyStreamPointView>();
+        foreach (var s in states)
+        {
+            var buckets = new SortedDictionary<int, decimal>();
+            foreach (var e in s.Events)
+            {
+                buckets.TryGetValue(e.OccurredAt.Year, out var amt);
+                buckets[e.OccurredAt.Year] = amt + e.Amount.Amount;
+            }
+            foreach (var (year, amount) in buckets)
+            {
+                output.Add(new YearlyStreamPointView(
+                    Year: year,
+                    StreamId: s.Id,
+                    StreamName: s.Name,
+                    Direction: s.Direction,
+                    Amount: Math.Round(amount, 2)));
+            }
+        }
+        return output;
     }
 
     private static IReadOnlyList<YearlyAggregateView> ComputeYearlyHistory(IReadOnlyList<StreamGrainState> states)
@@ -498,7 +592,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         foreach (var id in ids)
         {
             var state = await grains.GetGrain<IStreamGrain>(id).GetAsync();
-            if (state.Status is StreamStatus.Deleted) continue;
+            if (state.Status is StreamStatus.Stopped or StreamStatus.Deleted) continue;
             states.Add(state);
         }
         return states;

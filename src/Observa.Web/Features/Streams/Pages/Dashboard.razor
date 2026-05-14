@@ -40,6 +40,8 @@ else
     }
     else
     {
+    <StreamFilter Streams="_allStreams" SelectionChanged="OnFilterChangedAsync" />
+
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <section class="lg:col-span-2 border border-zinc-800 rounded p-5 sm:p-6">
             <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">This month so far</p>
@@ -168,23 +170,27 @@ else
         <CumulativeBalanceChart Data="_balance" />
     </section>
 
-    @if (_yearly.Count >= 2)
+    @if (_yearlyByStream.Count > 0)
     {
         <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
             <div class="flex items-baseline justify-between mb-4 flex-wrap gap-2">
                 <h2 class="text-sm uppercase tracking-wide text-zinc-400">Yearly trend</h2>
-                <p class="text-xs text-zinc-500">Income, outcome and net by calendar year</p>
+                <p class="text-xs text-zinc-500">Stacked by stream · income above zero, outcome below</p>
             </div>
-            <YearlyBars Data="_yearly" />
+            <YearlyStreamBars Data="_yearlyByStream" />
         </section>
     }
 
-    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
-        <div class="flex items-baseline justify-between mb-4">
-            <h2 class="text-sm uppercase tracking-wide text-zinc-400">Monthly net — last 12 months</h2>
-        </div>
-        <HeroBars Data="_history" />
-    </section>
+    @if (_historyByStream.Count > 0)
+    {
+        <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
+            <div class="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Monthly contribution — last 12 months</h2>
+                <p class="text-xs text-zinc-500">Stacked by stream · income above zero, outcome below</p>
+            </div>
+            <MonthlyStreamBars Data="_historyByStream" />
+        </section>
+    }
 
     <section class="border border-zinc-800 rounded overflow-hidden">
         <div class="px-4 sm:px-5 py-3 border-b border-zinc-800">
@@ -320,6 +326,10 @@ else
     private IReadOnlyList<StreamTrendView> _trends = [];
     private IReadOnlyList<CumulativeBalancePointView> _balance = [];
     private IReadOnlyList<YearlyAggregateView> _yearly = [];
+    private IReadOnlyList<StreamSummaryView> _allStreams = [];
+    private IReadOnlyList<MonthlyStreamPointView> _historyByStream = [];
+    private IReadOnlyList<YearlyStreamPointView> _yearlyByStream = [];
+    private IReadOnlyCollection<Guid>? _filter;
 
     protected override async Task OnInitializedAsync()
     {
@@ -327,15 +337,29 @@ else
         _hasData = existing.Count > 0;
         if (_hasData)
         {
-            _summary = await Analytics.GetCurrentMonthAsync(CancellationToken.None);
-            _history = await Analytics.GetMonthlyHistoryAsync(12, CancellationToken.None);
-            _trends = await Analytics.GetStreamTrendsAsync(12, CancellationToken.None);
-            _projection = await Analytics.GetProjectionAsync(CancellationToken.None);
-            _retrospective = await Analytics.GetRetrospectiveAsync(CancellationToken.None);
-            _balance = await Analytics.GetCumulativeBalanceAsync(6, CancellationToken.None);
-            _yearly = await Analytics.GetYearlyHistoryAsync(CancellationToken.None);
+            _allStreams = await Analytics.GetStreamSummariesAsync(CancellationToken.None);
+            await LoadAnalyticsAsync();
         }
         _loading = false;
+    }
+
+    private async Task LoadAnalyticsAsync()
+    {
+        _summary = await Analytics.GetCurrentMonthAsync(CancellationToken.None, _filter);
+        _history = await Analytics.GetMonthlyHistoryAsync(12, CancellationToken.None, _filter);
+        _trends = await Analytics.GetStreamTrendsAsync(12, CancellationToken.None, _filter);
+        _projection = await Analytics.GetProjectionAsync(CancellationToken.None, _filter);
+        _retrospective = await Analytics.GetRetrospectiveAsync(CancellationToken.None, _filter);
+        _balance = await Analytics.GetCumulativeBalanceAsync(6, CancellationToken.None, _filter);
+        _yearly = await Analytics.GetYearlyHistoryAsync(CancellationToken.None, _filter);
+        _historyByStream = await Analytics.GetMonthlyHistoryByStreamAsync(12, CancellationToken.None, _filter);
+        _yearlyByStream = await Analytics.GetYearlyHistoryByStreamAsync(CancellationToken.None, _filter);
+    }
+
+    private async Task OnFilterChangedAsync(IReadOnlyCollection<Guid> selection)
+    {
+        _filter = selection;
+        await LoadAnalyticsAsync();
     }
 
     private string TabClass(int idx) =>
