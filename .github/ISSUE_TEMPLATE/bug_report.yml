@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a defect in Observa
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report. Please check first whether the issue
+        is already tracked. If it concerns a vulnerability, use the private
+        Security report flow instead.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: A clear description of the unexpected behaviour.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, ordered steps. Include sample data or screenshots if useful.
+      placeholder: |
+        1. Run `docker compose up -d --build`
+        2. Open http://localhost:8080
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit SHA, tag, or Docker image tag.
+      placeholder: "main @ abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Aspire (local dev)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Output from `docker compose logs web` or the Aspire dashboard. Redact secrets.
+      render: shell

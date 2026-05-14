@@ -1,0 +1,32 @@
+# Normalize line endings on commit; check out native.
+* text=auto eol=lf
+
+# Force LF for shell scripts and CI configs.
+*.sh                  text eol=lf
+*.yml                 text eol=lf
+*.yaml                text eol=lf
+Dockerfile            text eol=lf
+*.props               text eol=lf
+*.targets             text eol=lf
+*.csproj              text eol=lf
+*.sln                 text eol=lf
+*.slnx                text eol=lf
+*.cs                  text eol=lf diff=csharp
+*.razor               text eol=lf
+*.cshtml              text eol=lf
+*.json                text eol=lf
+*.md                  text eol=lf
+*.css                 text eol=lf
+
+# Treat binary assets as binary.
+*.png                 binary
+*.jpg                 binary
+*.jpeg                binary
+*.gif                 binary
+*.ico                 binary
+*.pdf                 binary
+*.nupkg               binary
+*.snupkg              binary
+
+# Collapse generator/lock files in diffs.
+package-lock.json     -diff

@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest a feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Observa is intentionally scoped to **macro** financial observability.
+        Detailed transactional budgeting is out of scope. Please confirm your
+        request fits the scope before filing.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the user need, not the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: How would this work from the user's perspective? UI, API, or behaviour.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This concerns streams, projections, connectors, or the dashboard — not per-transaction budgeting.
+          required: true
+        - label: I have searched existing issues and discussions for duplicates.
+          required: true
