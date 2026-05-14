@@ -1,0 +1,41 @@
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+         @onclick="OnCloseRequested"></div>
+
+    <div class="fixed inset-x-0 bottom-0 sm:inset-0 z-50 sm:flex sm:items-center sm:justify-center sm:p-4"
+         role="dialog"
+         aria-modal="true">
+        <div class="bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-xl w-full sm:max-w-2xl mx-auto max-h-[92vh] sm:max-h-[85vh] flex flex-col shadow-2xl"
+             @onclick:stopPropagation="true">
+            <header class="flex items-start justify-between gap-4 p-5 border-b border-zinc-800 sticky top-0 bg-zinc-950 rounded-t-2xl sm:rounded-t-xl">
+                <div>
+                    <h2 class="text-lg font-semibold tracking-tight">@Title</h2>
+                    @if (!string.IsNullOrEmpty(Subtitle))
+                    {
+                        <p class="text-sm text-zinc-500 mt-0.5">@Subtitle</p>
+                    }
+                </div>
+                <button type="button"
+                        @onclick="OnCloseRequested"
+                        aria-label="Close"
+                        class="text-zinc-500 hover:text-zinc-100 text-2xl leading-none px-1">
+                    &times;
+                </button>
+            </header>
+            <div class="p-5 overflow-y-auto flex-1">
+                @ChildContent
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private Task OnCloseRequested() => OnClose.InvokeAsync();
+}

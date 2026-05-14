@@ -4,16 +4,24 @@
 
 <PageTitle>Streams · Observa</PageTitle>
 
-<header class="mb-6 flex items-end justify-between">
+<header class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div>
         <h1 class="text-2xl font-semibold tracking-tight">Streams</h1>
         <p class="text-sm text-zinc-500">All registered streams and their connector status.</p>
     </div>
-    <a href="streams/new"
-       class="px-4 py-2 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white">
+    <button type="button" @onclick="@(() => _registerOpen = true)"
+            class="self-start sm:self-auto px-4 py-2 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white whitespace-nowrap">
         + Register stream
-    </a>
+    </button>
 </header>
+
+<Modal IsOpen="_registerOpen"
+       Title="Register stream"
+       Subtitle="Create an income or outcome stream. Connector binding is optional."
+       OnClose="@(() => _registerOpen = false)">
+    <RegisterStreamForm OnRegistered="OnRegisteredAsync"
+                        OnCancel="@(() => _registerOpen = false)" />
+</Modal>
 
 <label class="flex items-center gap-2 text-sm text-zinc-400 mb-4">
     <input type="checkbox" class="h-4 w-4 accent-zinc-100" @bind="_includeTerminal" @bind:after="LoadAsync" />
@@ -132,6 +140,7 @@ else
 @code {
     private IReadOnlyList<StreamOperationsView>? _rows;
     private bool _includeTerminal;
+    private bool _registerOpen;
 
     protected override Task OnInitializedAsync() => LoadAsync();
 
@@ -139,6 +148,12 @@ else
     {
         _rows = null;
         _rows = await Query.ListOperationsAsync(_includeTerminal, CancellationToken.None);
+    }
+
+    private async Task OnRegisteredAsync()
+    {
+        _registerOpen = false;
+        await LoadAsync();
     }
 
     private static string FormatRelative(DateTimeOffset? when, string prefix = "")

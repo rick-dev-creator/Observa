@@ -1,0 +1,376 @@
+@using ApexCharts
+@inject StreamAnalyticsService Analytics
+
+<div>
+    <p class="text-sm text-zinc-400 mb-4">
+        Pick a scenario to see how it would change your numbers.
+    </p>
+
+    @if (_presets.Count == 0)
+    {
+        <p class="text-zinc-500 text-sm">You need at least one active stream to run scenarios.</p>
+    }
+    else
+    {
+        <div class="flex flex-wrap gap-2 mb-6">
+            @foreach (var p in _presets)
+            {
+                <button type="button"
+                        class="@PresetClass(p)"
+                        @onclick="@(() => SelectAsync(p))">
+                    @p.Label
+                </button>
+            }
+        </div>
+
+        @if (_loading)
+        {
+            <p class="text-zinc-500 text-sm">Calculating…</p>
+        }
+        else if (_result is not null && _selected is not null)
+        {
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                @{
+                    var bEom = _result.BaselineProjection.EndOfMonth ?? 0m;
+                    var sEom = _result.ScenarioProjection.EndOfMonth ?? 0m;
+                    var bYear = _result.BaselineProjection.YearEnd ?? 0m;
+                    var sYear = _result.ScenarioProjection.YearEnd ?? 0m;
+                }
+
+                <article class="border border-zinc-800 rounded p-5">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">End of month</p>
+                    <p class="text-2xl font-semibold tabular-nums @NetColor(sEom)">
+                        @FormatMoney(sEom, signed: true)
+                    </p>
+                    <p class="text-xs text-zinc-500 mt-1 tabular-nums">
+                        was: @FormatMoney(bEom, signed: true)
+                    </p>
+                    @if (Math.Abs(sEom - bEom) >= 0.01m)
+                    {
+                        <p class="text-sm mt-2 tabular-nums @DeltaColor(sEom - bEom)">
+                            @DeltaArrow(sEom - bEom) @FormatMoney(Math.Abs(sEom - bEom))
+                        </p>
+                    }
+                </article>
+
+                <article class="border border-zinc-800 rounded p-5">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">Year end</p>
+                    <p class="text-2xl font-semibold tabular-nums @NetColor(sYear)">
+                        @FormatMoney(sYear, signed: true)
+                    </p>
+                    <p class="text-xs text-zinc-500 mt-1 tabular-nums">
+                        was: @FormatMoney(bYear, signed: true)
+                    </p>
+                    @if (Math.Abs(sYear - bYear) >= 0.01m)
+                    {
+                        <p class="text-sm mt-2 tabular-nums @DeltaColor(sYear - bYear)">
+                            @DeltaArrow(sYear - bYear) @FormatMoney(Math.Abs(sYear - bYear))
+                        </p>
+                    }
+                </article>
+
+                <article class="border border-zinc-800 rounded p-5">
+                    <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">Runway</p>
+                    <p class="text-2xl font-semibold tabular-nums @RunwayColor(_result.ScenarioProjection.RunwayMonths)">
+                        @RunwayLabel(_result.ScenarioProjection.RunwayMonths)
+                    </p>
+                    <p class="text-xs text-zinc-500 mt-1">
+                        was: @RunwayLabel(_result.BaselineProjection.RunwayMonths)
+                    </p>
+                    @{
+                        var runwayDelta = RunwayDelta(_result.BaselineProjection.RunwayMonths, _result.ScenarioProjection.RunwayMonths);
+                    }
+                    @if (runwayDelta is { } d && d != 0)
+                    {
+                        <p class="text-sm mt-2 @DeltaColor(d)">
+                            @(d > 0 ? "↑" : "↓") @Math.Abs(d) @(Math.Abs(d) == 1 ? "month" : "months")
+                        </p>
+                    }
+                </article>
+            </div>
+
+            <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
+                <div class="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+                    <h3 class="text-sm uppercase tracking-wide text-zinc-400">Net by month — baseline vs scenario</h3>
+                    <p class="text-xs text-zinc-500">Last 12 months · next 3 projected</p>
+                </div>
+                <ApexChart TItem="ScenarioPointView"
+                           Options="@_chartOptions"
+                           Height="320"
+                           Debug="false"
+                           @ref="_chartRef">
+
+                    <ApexPointSeries TItem="ScenarioPointView"
+                                     Items="_result.NetSeries"
+                                     Name="Baseline"
+                                     SeriesType="SeriesType.Line"
+                                     XValue="@(p => p.Label)"
+                                     YValue="@(p => p.Baseline)" />
+
+                    <ApexPointSeries TItem="ScenarioPointView"
+                                     Items="_result.NetSeries"
+                                     Name="Scenario"
+                                     SeriesType="SeriesType.Line"
+                                     XValue="@(p => p.Label)"
+                                     YValue="@(p => p.Scenario)" />
+                </ApexChart>
+            </section>
+
+            @if (_result.StreamImpacts.Count > 0)
+            {
+                <section class="border border-zinc-800 rounded overflow-hidden mb-6">
+                    <div class="px-4 sm:px-5 py-3 border-b border-zinc-800 flex items-baseline justify-between">
+                        <h3 class="text-sm uppercase tracking-wide text-zinc-400">Stream impact</h3>
+                        <p class="text-xs text-zinc-500">@_result.StreamImpacts.Count affected</p>
+                    </div>
+                    <table class="w-full text-sm">
+                        <thead class="bg-zinc-900/50 text-zinc-500 text-xs uppercase tracking-wide">
+                            <tr>
+                                <th class="text-left px-4 py-2 font-medium">Stream</th>
+                                <th class="text-right px-4 py-2 font-medium">Baseline avg</th>
+                                <th class="text-right px-4 py-2 font-medium">Scenario avg</th>
+                                <th class="text-right px-4 py-2 font-medium">Impact on net</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-800">
+                            @foreach (var impact in _result.StreamImpacts)
+                            {
+                                <tr>
+                                    <td class="px-4 py-2">
+                                        <span class="text-zinc-100">@impact.Name</span>
+                                        <span class="text-xs text-zinc-500 ml-2">@impact.Direction</span>
+                                    </td>
+                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-400">@FormatMoney(impact.BaselineRecentAverage)</td>
+                                    <td class="px-4 py-2 text-right tabular-nums">
+                                        @if (impact.ScenarioRecentAverage is null)
+                                        {
+                                            <span class="text-zinc-600">excluded</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-zinc-200">@FormatMoney(impact.ScenarioRecentAverage.Value)</span>
+                                        }
+                                    </td>
+                                    <td class="px-4 py-2 text-right tabular-nums @DeltaColor(impact.Delta)">
+                                        @DeltaArrow(impact.Delta) @FormatMoney(Math.Abs(impact.Delta))
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </section>
+            }
+
+            <div class="border border-zinc-800 rounded p-4 bg-zinc-900/30">
+                <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">@_selected.Label</p>
+                <p class="text-sm text-zinc-300">@_selected.Narrative</p>
+                <p class="text-sm text-zinc-400 mt-2">@BuildSummary()</p>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StreamTrendView> Trends { get; set; } = [];
+
+    private List<Scenario> _presets = new();
+    private Scenario? _selected;
+    private WhatIfResultView? _result;
+    private bool _loading;
+    private ApexChart<ScenarioPointView>? _chartRef;
+    private ApexChartOptions<ScenarioPointView> _chartOptions = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _chartOptions = BuildChartOptions();
+        _presets = BuildPresets();
+        if (_presets.Count > 0)
+        {
+            await SelectAsync(_presets[0]);
+        }
+    }
+
+    private static ApexChartOptions<ScenarioPointView> BuildChartOptions() => new()
+    {
+        Chart = new Chart
+        {
+            Background = "transparent",
+            ForeColor = "#a1a1aa",
+            Toolbar = new Toolbar { Show = false },
+            Animations = new Animations { Enabled = true, Speed = 400 },
+            FontFamily = "ui-sans-serif, system-ui",
+        },
+        Colors = new List<string> { "#a1a1aa", "#10b981" },
+        Stroke = new Stroke
+        {
+            Curve = new List<Curve> { Curve.Smooth, Curve.Smooth },
+            Width = new List<double> { 2, 3 },
+            DashArray = new List<double> { 4, 0 },
+        },
+        Markers = new Markers { Size = 4, StrokeWidth = 0 },
+        Grid = new Grid { BorderColor = "#27272a", StrokeDashArray = 3 },
+        Xaxis = new XAxis
+        {
+            AxisBorder = new AxisBorder { Color = "#27272a" },
+            AxisTicks = new AxisTicks { Color = "#27272a" },
+        },
+        Tooltip = new Tooltip
+        {
+            Theme = Mode.Dark,
+            Y = new TooltipY { Formatter = "function(val) { return '$' + val.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }" },
+        },
+        Legend = new Legend { Position = LegendPosition.Top, HorizontalAlign = Align.Right },
+        DataLabels = new DataLabels { Enabled = false },
+    };
+
+    private List<Scenario> BuildPresets()
+    {
+        var list = new List<Scenario> { Scenario.None with { Label = "No changes", Narrative = "Your numbers as they stand today." } };
+
+        var incomes = Trends.Where(t => t.Direction == Direction.Income && (t.RecentAverage ?? 0m) > 0).ToList();
+        var outcomes = Trends.Where(t => t.Direction == Direction.Outcome && (t.RecentAverage ?? 0m) > 0).ToList();
+
+        if (incomes.Count > 0)
+        {
+            var top = incomes.OrderByDescending(t => t.RecentAverage).First();
+            list.Add(Scenario.ExcludeStream(
+                id: "lose-top-income",
+                label: $"Lose «{top.Name}»",
+                narrative: $"Simulates losing income from {top.Name}.",
+                streamId: top.Id));
+
+            list.Add(Scenario.MultiplyStream(
+                id: "raise-top-income",
+                label: $"+10% raise on «{top.Name}»",
+                narrative: $"Simulates a 10% raise on {top.Name}.",
+                streamId: top.Id,
+                factor: 1.10m));
+        }
+
+        if (outcomes.Count > 0)
+        {
+            list.Add(Scenario.MultiplyDirection(
+                id: "spend-20-less",
+                label: "Spend 20% less",
+                narrative: "Simulates cutting 20% off all your outflows.",
+                direction: Direction.Outcome,
+                factor: 0.80m));
+
+            var subsCategory = outcomes
+                .Select(t => t.Category)
+                .FirstOrDefault(c => c.Contains("subscription", StringComparison.OrdinalIgnoreCase)
+                                     || c.Contains("suscrip", StringComparison.OrdinalIgnoreCase));
+            if (subsCategory is not null)
+            {
+                list.Add(Scenario.MultiplyCategory(
+                    id: "cancel-subs",
+                    label: "Cancel subscriptions",
+                    narrative: $"Simulates removing all outflows in the «{subsCategory}» category.",
+                    category: subsCategory,
+                    factor: 0m));
+            }
+
+            var topOutcome = outcomes.OrderByDescending(t => t.RecentAverage).First();
+            list.Add(Scenario.ExcludeStream(
+                id: "drop-top-outcome",
+                label: $"Drop «{topOutcome.Name}»",
+                narrative: $"Simulates dropping {topOutcome.Name} entirely.",
+                streamId: topOutcome.Id));
+        }
+
+        return list;
+    }
+
+    private async Task SelectAsync(Scenario scenario)
+    {
+        _selected = scenario;
+        _loading = true;
+        StateHasChanged();
+        _result = await Analytics.GetWhatIfAsync(scenario, CancellationToken.None);
+        _loading = false;
+        StateHasChanged();
+        if (_chartRef is not null)
+        {
+            await _chartRef.UpdateSeriesAsync(true);
+        }
+    }
+
+    private string PresetClass(Scenario p) =>
+        _selected?.Id == p.Id
+            ? "px-3 py-1.5 rounded-full text-sm bg-zinc-100 text-zinc-900 font-medium"
+            : "px-3 py-1.5 rounded-full text-sm bg-zinc-900 text-zinc-300 border border-zinc-800 hover:border-zinc-600";
+
+    private string BuildSummary()
+    {
+        if (_result is null) return "";
+        var dEom = (_result.ScenarioProjection.EndOfMonth ?? 0m) - (_result.BaselineProjection.EndOfMonth ?? 0m);
+        var dYear = (_result.ScenarioProjection.YearEnd ?? 0m) - (_result.BaselineProjection.YearEnd ?? 0m);
+        if (Math.Abs(dEom) < 0.5m && Math.Abs(dYear) < 0.5m) return "No impact on your projections.";
+
+        var parts = new List<string>();
+        if (Math.Abs(dYear) >= 1)
+            parts.Add($"You'd {(dYear > 0 ? "gain" : "lose")} ~{FormatMoney(Math.Abs(dYear))} by year end");
+        if (Math.Abs(dEom) >= 1)
+            parts.Add($"{(dEom > 0 ? "+" : "−")}{FormatMoney(Math.Abs(dEom))} this month");
+        return parts.Count > 0 ? string.Join(" · ", parts) + "." : "";
+    }
+
+    private static int? RunwayDelta(int? baseline, int? scenario)
+    {
+        if (baseline is null && scenario is null) return null;
+        return (scenario ?? 999) - (baseline ?? 999);
+    }
+
+    private static string RunwayLabel(int? months) => months switch
+    {
+        null => "no concern",
+        0 => "0 months",
+        1 => "1 month",
+        _ => $"{months} months",
+    };
+
+    private static string RunwayColor(int? months) => months switch
+    {
+        null => "text-emerald-400",
+        <= 3 => "text-rose-400",
+        <= 6 => "text-amber-400",
+        _ => "text-zinc-200",
+    };
+
+    private static string FormatMoney(decimal v, bool signed = false)
+    {
+        var s = Math.Abs(v).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        if (!signed) return $"${s}";
+        if (v > 0) return $"+${s}";
+        if (v < 0) return $"−${s}";
+        return $"${s}";
+    }
+
+    private static string NetColor(decimal n) => n switch
+    {
+        > 0 => "text-emerald-400",
+        < 0 => "text-rose-400",
+        _ => "text-zinc-200",
+    };
+
+    private static string DeltaColor(decimal d) => d switch
+    {
+        > 0 => "text-emerald-400",
+        < 0 => "text-rose-400",
+        _ => "text-zinc-400",
+    };
+
+    private static string DeltaColor(int d) => d switch
+    {
+        > 0 => "text-emerald-400",
+        < 0 => "text-rose-400",
+        _ => "text-zinc-400",
+    };
+
+    private static string DeltaArrow(decimal d) => d switch
+    {
+        > 0 => "↑",
+        < 0 => "↓",
+        _ => "·",
+    };
+}

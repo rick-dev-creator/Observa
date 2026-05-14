@@ -14,13 +14,32 @@ else if (!_hasData)
     <div class="border border-dashed border-zinc-700 rounded p-8 sm:p-12 text-center">
         <h1 class="text-2xl font-semibold mb-2">Welcome to Observa</h1>
         <p class="text-zinc-400 mb-6">No streams yet. Register your first income or outcome stream to start.</p>
-        <a href="streams/new" class="inline-block px-4 py-2 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white">
+        <a href="streams" class="inline-block px-4 py-2 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white">
             Register a stream
         </a>
     </div>
 }
 else
 {
+    <div class="flex gap-1 mb-6 border-b border-zinc-800" role="tablist">
+        <button type="button" role="tab"
+                class="@TabClass(0)"
+                @onclick="@(() => _activeTab = 0)">
+            Overview
+        </button>
+        <button type="button" role="tab"
+                class="@TabClass(1)"
+                @onclick="@(() => _activeTab = 1)">
+            What if…
+        </button>
+    </div>
+
+    @if (_activeTab == 1)
+    {
+        <WhatIfTab Trends="_trends" />
+    }
+    else
+    {
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <section class="lg:col-span-2 border border-zinc-800 rounded p-5 sm:p-6">
             <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">This month so far</p>
@@ -89,6 +108,66 @@ else
         </section>
     </div>
 
+    @if (_retrospective is not null)
+    {
+        <section class="border border-zinc-800 rounded p-5 sm:p-6 mb-6">
+            <p class="text-xs uppercase tracking-wide text-zinc-500 mb-4">Where you've been</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                    <p class="text-xs text-zinc-500">Year to date</p>
+                    <p class="text-2xl font-semibold tabular-nums @NetColor(_retrospective.YearToDateNet)">
+                        @FormatMoney(_retrospective.YearToDateNet, signed: true)
+                    </p>
+                    <p class="text-xs text-zinc-500 mt-1 tabular-nums">
+                        <span class="text-emerald-400">+@FormatMoney(_retrospective.YearToDateIncome)</span>
+                        <span class="text-zinc-600">/</span>
+                        <span class="text-rose-400">−@FormatMoney(_retrospective.YearToDateOutcome)</span>
+                    </p>
+                </div>
+                @if (_retrospective.YoyDelta is { } yoy && _retrospective.PreviousYearSamePointNet is { } prev)
+                {
+                    <div>
+                        <p class="text-xs text-zinc-500">vs last year</p>
+                        <p class="text-2xl font-semibold tabular-nums @DeltaColor(yoy)">
+                            @DeltaArrow(yoy) @FormatMoney(Math.Abs(yoy))
+                        </p>
+                        <p class="text-xs text-zinc-500 mt-1 tabular-nums">
+                            prev YTD: @FormatMoney(prev, signed: true)
+                        </p>
+                    </div>
+                }
+                @if (_retrospective.BestMonth is { } best)
+                {
+                    <div>
+                        <p class="text-xs text-zinc-500">Best month</p>
+                        <p class="text-2xl font-semibold tabular-nums text-emerald-400">
+                            @FormatMoney(best.Net, signed: true)
+                        </p>
+                        <p class="text-xs text-zinc-500 mt-1">@MonthLabel(best.Year, best.Month)</p>
+                    </div>
+                }
+                @if (_retrospective.WorstMonth is { } worst)
+                {
+                    <div>
+                        <p class="text-xs text-zinc-500">Worst month</p>
+                        <p class="text-2xl font-semibold tabular-nums text-rose-400">
+                            @FormatMoney(worst.Net, signed: true)
+                        </p>
+                        <p class="text-xs text-zinc-500 mt-1">@MonthLabel(worst.Year, worst.Month)</p>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
+        <div class="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+            <h2 class="text-sm uppercase tracking-wide text-zinc-400">Running balance</h2>
+            <p class="text-xs text-zinc-500">Cumulative net · solid is history, area continues into 6-month forecast</p>
+        </div>
+        <CumulativeBalanceChart Data="_balance" />
+    </section>
+
     <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
         <div class="flex items-baseline justify-between mb-4">
             <h2 class="text-sm uppercase tracking-wide text-zinc-400">Monthly net — last 12 months</h2>
@@ -108,6 +187,7 @@ else
                         <th class="text-left px-4 py-2 font-medium">Stream</th>
                         <th class="text-right px-4 py-2 font-medium">Expected</th>
                         <th class="text-right px-4 py-2 font-medium">Last month</th>
+                        <th class="text-right px-4 py-2 font-medium">Avg</th>
                         <th class="text-left px-4 py-2 font-medium w-32">Trend</th>
                         <th class="text-left px-4 py-2 font-medium w-32">Sparkline</th>
                     </tr>
@@ -125,6 +205,16 @@ else
                                 @if (t.LastMonthAmount is { } lm && lm > 0)
                                 {
                                     <span class="@(t.Direction == Direction.Income ? "text-emerald-400" : "text-rose-400")">@FormatMoney(lm)</span>
+                                }
+                                else
+                                {
+                                    <span class="text-zinc-600">—</span>
+                                }
+                            </td>
+                            <td class="px-4 py-2 text-right tabular-nums">
+                                @if (t.RecentAverage is { } avg && avg > 0)
+                                {
+                                    <span class="text-zinc-300">@FormatMoney(avg)</span>
                                 }
                                 else
                                 {
@@ -179,6 +269,17 @@ else
                                         <span class="text-zinc-600">—</span>
                                     }
                                 </div>
+                                <div class="flex gap-2">
+                                    <span class="text-zinc-500">Avg:</span>
+                                    @if (t.RecentAverage is { } avg && avg > 0)
+                                    {
+                                        <span class="text-zinc-300 tabular-nums">@FormatMoney(avg)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-zinc-600">—</span>
+                                    }
+                                </div>
                                 @if (!string.IsNullOrEmpty(t.TrendDetail))
                                 {
                                     <p class="text-zinc-500">@t.TrendDetail</p>
@@ -194,15 +295,19 @@ else
             }
         </ul>
     </section>
+    }
 }
 
 @code {
     private bool _loading = true;
     private bool _hasData;
+    private int _activeTab = 0;
     private MonthSummaryView? _summary;
     private ProjectionView? _projection;
+    private RetrospectiveView? _retrospective;
     private IReadOnlyList<MonthlyAggregateView> _history = [];
     private IReadOnlyList<StreamTrendView> _trends = [];
+    private IReadOnlyList<CumulativeBalancePointView> _balance = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -214,9 +319,19 @@ else
             _history = await Analytics.GetMonthlyHistoryAsync(12, CancellationToken.None);
             _trends = await Analytics.GetStreamTrendsAsync(12, CancellationToken.None);
             _projection = await Analytics.GetProjectionAsync(CancellationToken.None);
+            _retrospective = await Analytics.GetRetrospectiveAsync(CancellationToken.None);
+            _balance = await Analytics.GetCumulativeBalanceAsync(6, CancellationToken.None);
         }
         _loading = false;
     }
+
+    private string TabClass(int idx) =>
+        _activeTab == idx
+            ? "px-4 py-2 text-sm font-medium text-zinc-100 border-b-2 border-zinc-100 -mb-px"
+            : "px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 border-b-2 border-transparent -mb-px";
+
+    private static string MonthLabel(int year, int month) =>
+        $"{System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedMonthName(month)} {year}";
 
     private static string FormatMoney(decimal v, bool signed = false)
     {

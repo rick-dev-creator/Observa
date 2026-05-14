@@ -1,0 +1,115 @@
+@using ApexCharts
+
+<div class="w-full">
+    <ApexChart TItem="CumulativeBalancePointView"
+               Options="@_options"
+               Height="320"
+               Debug="false">
+
+        <ApexPointSeries TItem="CumulativeBalancePointView"
+                         Items="Data"
+                         Name="Balance"
+                         SeriesType="SeriesType.Area"
+                         XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                         YValue="@(p => p.Balance)" />
+    </ApexChart>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CumulativeBalancePointView> Data { get; set; } = [];
+
+    private ApexChartOptions<CumulativeBalancePointView> _options = null!;
+
+    protected override void OnParametersSet()
+    {
+        var lastHistorical = Data.LastOrDefault(p => !p.IsProjected);
+        var firstProjected = Data.FirstOrDefault(p => p.IsProjected);
+
+        _options = new ApexChartOptions<CumulativeBalancePointView>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                ForeColor = "#a1a1aa",
+                Toolbar = new Toolbar { Show = false },
+                Animations = new Animations { Enabled = true, Speed = 400 },
+                FontFamily = "ui-sans-serif, system-ui",
+                Zoom = new Zoom { Enabled = false },
+            },
+            Colors = new List<string> { "#10b981" },
+            Stroke = new Stroke
+            {
+                Curve = new List<Curve> { Curve.Smooth },
+                Width = new List<double> { 2.5 },
+            },
+            Fill = new Fill
+            {
+                Type = new List<FillType> { FillType.Gradient },
+                Gradient = new FillGradient
+                {
+                    ShadeIntensity = 1,
+                    OpacityFrom = 0.45,
+                    OpacityTo = 0.05,
+                    Stops = new List<double> { 0, 100 },
+                },
+            },
+            Markers = new Markers { Size = 0 },
+            Grid = new Grid { BorderColor = "#27272a", StrokeDashArray = 3 },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                AxisBorder = new AxisBorder { Color = "#27272a" },
+                AxisTicks = new AxisTicks { Color = "#27272a" },
+                Labels = new XAxisLabels
+                {
+                    Rotate = 0,
+                    RotateAlways = false,
+                    HideOverlappingLabels = true,
+                    Format = "MMM yy",
+                },
+            },
+            Yaxis = new List<YAxis>
+            {
+                new()
+                {
+                    Labels = new YAxisLabels
+                    {
+                        Formatter = "function(val) { return '$' + Math.round(val).toLocaleString('en-US'); }",
+                    },
+                },
+            },
+            Tooltip = new Tooltip
+            {
+                Theme = Mode.Dark,
+                Y = new TooltipY { Formatter = "function(val) { return '$' + Math.round(val).toLocaleString('en-US'); }" },
+            },
+            Legend = new Legend { Show = false },
+            DataLabels = new DataLabels { Enabled = false },
+            Annotations = lastHistorical is not null && firstProjected is not null
+                ? new Annotations
+                {
+                    Xaxis = new List<AnnotationsXAxis>
+                    {
+                        new()
+                        {
+                            X = lastHistorical.Timestamp.ToUnixTimeMilliseconds(),
+                            BorderColor = "#71717a",
+                            StrokeDashArray = 5,
+                            Label = new Label
+                            {
+                                Text = "Today",
+                                BorderColor = "#71717a",
+                                Style = new Style
+                                {
+                                    Background = "#27272a",
+                                    Color = "#e4e4e7",
+                                    FontSize = "11px",
+                                },
+                            },
+                        },
+                    },
+                }
+                : null,
+        };
+    }
+}

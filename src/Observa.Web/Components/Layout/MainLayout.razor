@@ -15,11 +15,8 @@
         </div>
     </header>
 
-    @if (_sidebarOpen)
-    {
-        <button type="button" @onclick="CloseSidebar" aria-label="Close menu"
-                class="md:hidden fixed inset-0 bg-black/60 backdrop-blur-[1px] z-30"></button>
-    }
+    <button type="button" @onclick="CloseSidebar" aria-label="Close menu"
+            class="@BackdropClass"></button>
 
     <aside class="@SidebarClass">
         <NavMenu />
@@ -41,9 +38,18 @@
 @code {
     private bool _sidebarOpen;
 
+    private const string SidebarBase =
+        "w-64 shrink-0 border-r border-zinc-800 bg-zinc-900 fixed inset-y-0 left-0 z-40 overflow-y-auto " +
+        "transform transition-transform duration-300 ease-out " +
+        "md:relative md:inset-auto md:w-56 md:translate-x-0 md:transition-none";
+
     private string SidebarClass => _sidebarOpen
-        ? "w-64 shrink-0 border-r border-zinc-800 bg-zinc-900 fixed inset-y-0 left-0 z-40 overflow-y-auto md:relative md:inset-auto md:block md:w-56"
-        : "w-56 shrink-0 border-r border-zinc-800 bg-zinc-900 hidden md:block";
+        ? SidebarBase + " translate-x-0"
+        : SidebarBase + " -translate-x-full";
+
+    private string BackdropClass => _sidebarOpen
+        ? "md:hidden fixed inset-0 bg-black/60 backdrop-blur-[1px] z-30 transition-opacity duration-300 opacity-100"
+        : "md:hidden fixed inset-0 bg-black/60 backdrop-blur-[1px] z-30 transition-opacity duration-300 opacity-0 pointer-events-none";
 
     protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
 

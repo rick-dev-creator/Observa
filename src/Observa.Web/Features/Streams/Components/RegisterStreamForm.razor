@@ -1,16 +1,6 @@
-@page "/streams/new"
-@rendermode InteractiveServer
 @inject StreamService Streams
-@inject NavigationManager Nav
 
-<PageTitle>Register stream · Observa</PageTitle>
-
-<header class="mb-6">
-    <h1 class="text-2xl font-semibold tracking-tight">Register stream</h1>
-    <p class="text-sm text-zinc-500">Create an income or outcome stream. Connector binding is optional.</p>
-</header>
-
-<EditForm Model="_form" OnValidSubmit="SubmitAsync" FormName="register-stream" class="space-y-5 max-w-2xl">
+<EditForm Model="_form" OnValidSubmit="SubmitAsync" FormName="register-stream" class="space-y-5">
     <DataAnnotationsValidator />
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -78,15 +68,21 @@
                 class="px-4 py-2 bg-zinc-100 text-zinc-900 rounded text-sm font-medium hover:bg-white disabled:opacity-50">
             @(_submitting ? "Registering…" : "Register stream")
         </button>
-        <a href="streams" class="px-4 py-2 text-zinc-400 hover:text-white text-sm self-center">Cancel</a>
+        <button type="button" @onclick="CancelAsync"
+                class="px-4 py-2 text-zinc-400 hover:text-white text-sm self-center">
+            Cancel
+        </button>
     </div>
 </EditForm>
 
 @code {
+    [Parameter] public EventCallback OnRegistered { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
     private const string FieldCss =
         "w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-500";
 
-    private readonly RegisterStreamForm _form = new();
+    private readonly RegisterStreamFormModel _form = new();
     private bool _submitting;
     private List<(string Code, string Message)>? _errors;
 
@@ -121,10 +117,13 @@
             return;
         }
 
-        Nav.NavigateTo("streams");
+        _submitting = false;
+        await OnRegistered.InvokeAsync();
     }
 
-    private sealed class RegisterStreamForm
+    private Task CancelAsync() => OnCancel.InvokeAsync();
+
+    private sealed class RegisterStreamFormModel
     {
         public string Name { get; set; } = "";
         public string Category { get; set; } = "";

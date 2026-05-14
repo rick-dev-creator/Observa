@@ -12,6 +12,175 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
     public async Task<MonthSummaryView> GetCurrentMonthAsync(CancellationToken ct)
     {
         var states = await LoadAllAsync(ct);
+        return ComputeCurrentMonth(states);
+    }
+
+    public async Task<IReadOnlyList<MonthlyAggregateView>> GetMonthlyHistoryAsync(int months, CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        return ComputeMonthlyHistory(states, months);
+    }
+
+    public async Task<IReadOnlyList<StreamTrendView>> GetStreamTrendsAsync(int sparklineMonths, CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        return ComputeStreamTrends(states, sparklineMonths);
+    }
+
+    public async Task<ProjectionView> GetProjectionAsync(CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        return ComputeProjection(states);
+    }
+
+    public async Task<RetrospectiveView> GetRetrospectiveAsync(CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        return ComputeRetrospective(states);
+    }
+
+    public async Task<IReadOnlyList<CumulativeBalancePointView>> GetCumulativeBalanceAsync(int futureMonths, CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        return ComputeCumulativeBalance(states, futureMonths);
+    }
+
+    public async Task<WhatIfResultView> GetWhatIfAsync(Scenario scenario, CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        var modified = ApplyScenario(states, scenario);
+
+        var baselineHistory = ComputeMonthlyHistory(states, 12);
+        var scenarioHistory = ComputeMonthlyHistory(modified, 12);
+        var baselineFuture = ProjectFuture(states, 3);
+        var scenarioFuture = ProjectFuture(modified, 3);
+
+        var series = new List<ScenarioPointView>(15);
+        for (var i = 0; i < baselineHistory.Count; i++)
+        {
+            series.Add(new ScenarioPointView(
+                Label: baselineHistory[i].Label,
+                Baseline: baselineHistory[i].Net,
+                Scenario: scenarioHistory[i].Net,
+                IsProjected: false));
+        }
+        for (var i = 0; i < baselineFuture.Count; i++)
+        {
+            series.Add(new ScenarioPointView(
+                Label: baselineFuture[i].Label,
+                Baseline: baselineFuture[i].Net,
+                Scenario: scenarioFuture[i].Net,
+                IsProjected: true));
+        }
+
+        var baselineTrends = ComputeStreamTrends(states, 12).ToDictionary(t => t.Id);
+        var scenarioTrends = ComputeStreamTrends(modified, 12).ToDictionary(t => t.Id);
+        var impacts = new List<StreamImpactView>();
+        foreach (var (id, b) in baselineTrends)
+        {
+            var bAvg = b.RecentAverage ?? 0m;
+            decimal? sAvg = scenarioTrends.TryGetValue(id, out var s) ? s.RecentAverage : null;
+            var sAvgValue = sAvg ?? 0m;
+            var sign = b.Direction == Direction.Income ? 1m : -1m;
+            var delta = (sAvgValue - bAvg) * sign;
+            if (Math.Abs(delta) < 0.01m) continue;
+            impacts.Add(new StreamImpactView(id, b.Name, b.Direction, bAvg, sAvg, delta));
+        }
+        impacts = impacts.OrderByDescending(i => Math.Abs(i.Delta)).ToList();
+
+        return new WhatIfResultView(
+            BaselineCurrentMonth: ComputeCurrentMonth(states),
+            BaselineProjection: ComputeProjection(states),
+            ScenarioCurrentMonth: ComputeCurrentMonth(modified),
+            ScenarioProjection: ComputeProjection(modified),
+            NetSeries: series,
+            StreamImpacts: impacts);
+    }
+
+    private static IReadOnlyList<CumulativeBalancePointView> ComputeCumulativeBalance(
+        IReadOnlyList<StreamGrainState> states,
+        int futureMonths)
+    {
+        DateTimeOffset? earliest = null;
+        foreach (var s in states)
+            foreach (var e in s.Events)
+                if (earliest is null || e.OccurredAt < earliest) earliest = e.OccurredAt;
+
+        if (earliest is null) return Array.Empty<CumulativeBalancePointView>();
+
+        var now = DateTimeOffset.UtcNow;
+        var firstMonth = new DateTimeOffset(earliest.Value.Year, earliest.Value.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var currentMonth = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var historicalMonths = (int)Math.Round((currentMonth - firstMonth).TotalDays / 30.44) + 1;
+        if (historicalMonths < 1) historicalMonths = 1;
+
+        var buckets = new SortedDictionary<(int Y, int M), (decimal Income, decimal Outcome)>();
+        for (var i = 0; i < historicalMonths; i++)
+        {
+            var d = firstMonth.AddMonths(i);
+            buckets[(d.Year, d.Month)] = (0m, 0m);
+        }
+
+        foreach (var s in states)
+        {
+            foreach (var e in s.Events)
+            {
+                var key = (e.OccurredAt.Year, e.OccurredAt.Month);
+                if (!buckets.TryGetValue(key, out var b)) continue;
+                if (s.Direction == Direction.Income) b.Income += e.Amount.Amount;
+                else b.Outcome += e.Amount.Amount;
+                buckets[key] = b;
+            }
+        }
+
+        var monthlyNets = buckets.Select(kv => (Key: kv.Key, Net: kv.Value.Income - kv.Value.Outcome)).ToList();
+
+        var completePast = monthlyNets.Count > 1
+            ? monthlyNets.Take(monthlyNets.Count - 1).Select(m => m.Net).ToArray()
+            : Array.Empty<decimal>();
+        var avgNet = completePast.Length > 0 ? completePast.Average() : 0m;
+
+        var points = new List<CumulativeBalancePointView>(monthlyNets.Count + futureMonths);
+        decimal running = 0m;
+        foreach (var (key, net) in monthlyNets)
+        {
+            running += net;
+            var ts = new DateTimeOffset(key.Y, key.M, 1, 0, 0, 0, TimeSpan.Zero);
+            points.Add(new CumulativeBalancePointView(ts.ToString("MMM yy"), ts, Math.Round(running, 2), IsProjected: false));
+        }
+
+        for (var i = 1; i <= futureMonths; i++)
+        {
+            running += avgNet;
+            var d = currentMonth.AddMonths(i);
+            points.Add(new CumulativeBalancePointView(d.ToString("MMM yy"), d, Math.Round(running, 2), IsProjected: true));
+        }
+
+        return points;
+    }
+
+    private static IReadOnlyList<MonthlyAggregateView> ProjectFuture(IReadOnlyList<StreamGrainState> states, int months)
+    {
+        var history = ComputeMonthlyHistory(states, 12);
+        var complete = history.SkipLast(1).ToArray();
+        var avgIncome = complete.Length > 0 ? complete.Average(m => m.Income) : 0m;
+        var avgOutcome = complete.Length > 0 ? complete.Average(m => m.Outcome) : 0m;
+        var avgNet = avgIncome - avgOutcome;
+
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var result = new List<MonthlyAggregateView>(months);
+        for (var i = 1; i <= months; i++)
+        {
+            var d = anchor.AddMonths(i);
+            result.Add(new MonthlyAggregateView(d.Year, d.Month,
+                Math.Round(avgIncome, 2), Math.Round(avgOutcome, 2), Math.Round(avgNet, 2), 0));
+        }
+        return result;
+    }
+
+    private static MonthSummaryView ComputeCurrentMonth(IReadOnlyList<StreamGrainState> states)
+    {
         var now = DateTimeOffset.UtcNow;
         var startThisMonth = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var startPrevMonth = startThisMonth.AddMonths(-1);
@@ -57,9 +226,8 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             DaysInMonth: daysInMonth);
     }
 
-    public async Task<IReadOnlyList<MonthlyAggregateView>> GetMonthlyHistoryAsync(int months, CancellationToken ct)
+    private static IReadOnlyList<MonthlyAggregateView> ComputeMonthlyHistory(IReadOnlyList<StreamGrainState> states, int months)
     {
-        var states = await LoadAllAsync(ct);
         var now = DateTimeOffset.UtcNow;
         var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var buckets = new SortedDictionary<(int Y, int M), (decimal Income, decimal Outcome, int Count)>();
@@ -91,9 +259,8 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             .ToList();
     }
 
-    public async Task<IReadOnlyList<StreamTrendView>> GetStreamTrendsAsync(int sparklineMonths, CancellationToken ct)
+    private static IReadOnlyList<StreamTrendView> ComputeStreamTrends(IReadOnlyList<StreamGrainState> states, int sparklineMonths)
     {
-        var states = await LoadAllAsync(ct);
         var now = DateTimeOffset.UtcNow;
         var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var trends = new List<StreamTrendView>(states.Count);
@@ -138,16 +305,15 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             .ToList();
     }
 
-    public async Task<ProjectionView> GetProjectionAsync(CancellationToken ct)
+    private static ProjectionView ComputeProjection(IReadOnlyList<StreamGrainState> states)
     {
-        var monthly = await GetMonthlyHistoryAsync(months: 12, ct);
-        var states = await LoadAllAsync(ct);
-        var current = await GetCurrentMonthAsync(ct);
+        var monthly = ComputeMonthlyHistory(states, months: 12);
+        var current = ComputeCurrentMonth(states);
 
         if (monthly.Count == 0)
             return new ProjectionView(null, null, null, null, null, "No history yet to project from.");
 
-        var completeMonths = monthly.SkipLast(1).ToArray(); // exclude current incomplete month
+        var completeMonths = monthly.SkipLast(1).ToArray();
         var avgNet = completeMonths.Length > 0 ? completeMonths.Average(m => m.Net) : 0m;
         var stddev = completeMonths.Length > 1 ? StdDev(completeMonths.Select(m => m.Net).ToArray()) : 0m;
 
@@ -168,11 +334,9 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         }
         else if (avgIncome >= avgOutcome)
         {
-            var burn = avgOutcome - avgIncome;          // ≤ 0
             runwayMessage = avgIncome > avgOutcome
                 ? "You earn more than you spend — no runway concern."
                 : "You break even — no runway concern.";
-            _ = burn;
         }
         else
         {
@@ -189,6 +353,108 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             Uncertainty: Math.Round(stddev, 2),
             RunwayMonths: runway,
             RunwayMessage: runwayMessage);
+    }
+
+    private static RetrospectiveView ComputeRetrospective(IReadOnlyList<StreamGrainState> states)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var ytdStart = new DateTimeOffset(now.Year, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var prevYtdStart = new DateTimeOffset(now.Year - 1, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var prevYearSamePoint = prevYtdStart.AddDays((now - ytdStart).TotalDays);
+
+        decimal ytdIncome = 0, ytdOutcome = 0;
+        decimal prevYtdIncome = 0, prevYtdOutcome = 0;
+        var monthlyNets = new Dictionary<(int Y, int M), decimal>();
+        var hasPrevYearData = false;
+
+        foreach (var s in states)
+        {
+            foreach (var e in s.Events)
+            {
+                var signed = s.Direction == Direction.Income ? e.Amount.Amount : -e.Amount.Amount;
+
+                if (e.OccurredAt >= ytdStart && e.OccurredAt < now)
+                {
+                    if (s.Direction == Direction.Income) ytdIncome += e.Amount.Amount;
+                    else ytdOutcome += e.Amount.Amount;
+                }
+                else if (e.OccurredAt >= prevYtdStart && e.OccurredAt < prevYearSamePoint)
+                {
+                    hasPrevYearData = true;
+                    if (s.Direction == Direction.Income) prevYtdIncome += e.Amount.Amount;
+                    else prevYtdOutcome += e.Amount.Amount;
+                }
+
+                var key = (e.OccurredAt.Year, e.OccurredAt.Month);
+                monthlyNets.TryGetValue(key, out var net);
+                monthlyNets[key] = net + signed;
+            }
+        }
+
+        var ytdNet = ytdIncome - ytdOutcome;
+        var prevYtdNet = prevYtdIncome - prevYtdOutcome;
+
+        var completeMonths = monthlyNets
+            .Where(kv => !(kv.Key.Y == now.Year && kv.Key.M == now.Month))
+            .ToList();
+
+        BestMonthView? best = null, worst = null;
+        if (completeMonths.Count > 0)
+        {
+            var b = completeMonths.MaxBy(kv => kv.Value);
+            var w = completeMonths.MinBy(kv => kv.Value);
+            best = new BestMonthView(b.Key.Y, b.Key.M, Math.Round(b.Value, 2));
+            worst = new BestMonthView(w.Key.Y, w.Key.M, Math.Round(w.Value, 2));
+        }
+
+        return new RetrospectiveView(
+            YearToDateNet: Math.Round(ytdNet, 2),
+            YearToDateIncome: Math.Round(ytdIncome, 2),
+            YearToDateOutcome: Math.Round(ytdOutcome, 2),
+            PreviousYearSamePointNet: hasPrevYearData ? Math.Round(prevYtdNet, 2) : null,
+            YoyDelta: hasPrevYearData ? Math.Round(ytdNet - prevYtdNet, 2) : null,
+            BestMonth: best,
+            WorstMonth: worst);
+    }
+
+    private static IReadOnlyList<StreamGrainState> ApplyScenario(
+        IReadOnlyList<StreamGrainState> states,
+        Scenario scenario)
+    {
+        var result = new List<StreamGrainState>(states.Count);
+        foreach (var s in states)
+        {
+            if (scenario.ExcludedStreamIds.Contains(s.Id)) continue;
+
+            decimal factor = 1m;
+            if (scenario.StreamMultipliers.TryGetValue(s.Id, out var sm)) factor *= sm;
+            if (scenario.CategoryMultipliers.TryGetValue(s.Category, out var cm)) factor *= cm;
+            if (scenario.DirectionMultipliers.TryGetValue(s.Direction, out var dm)) factor *= dm;
+
+            if (factor == 1m) { result.Add(s); continue; }
+
+            result.Add(new StreamGrainState
+            {
+                Id = s.Id,
+                Version = s.Version,
+                Name = s.Name,
+                Category = s.Category,
+                Direction = s.Direction,
+                Schedule = s.Schedule,
+                ExpectedAmount = s.ExpectedAmount is { } ea ? new MoneyState { Amount = Math.Max(0m, ea.Amount * factor) } : null,
+                Status = s.Status,
+                Events = s.Events.Select(e => new FlowEventSnapshot
+                {
+                    Id = e.Id,
+                    OccurredAt = e.OccurredAt,
+                    Amount = new MoneyState { Amount = Math.Max(0m, e.Amount.Amount * factor) },
+                    Source = e.Source,
+                    ExternalRef = e.ExternalRef,
+                }).ToList(),
+                Binding = s.Binding,
+            });
+        }
+        return result;
     }
 
     private async Task<IReadOnlyList<StreamGrainState>> LoadAllAsync(CancellationToken ct)
