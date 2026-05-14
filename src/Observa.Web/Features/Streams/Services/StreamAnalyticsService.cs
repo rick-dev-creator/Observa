@@ -45,6 +45,12 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         return ComputeCumulativeBalance(states, futureMonths);
     }
 
+    public async Task<IReadOnlyList<YearlyAggregateView>> GetYearlyHistoryAsync(CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        return ComputeYearlyHistory(states);
+    }
+
     public async Task<WhatIfResultView> GetWhatIfAsync(Scenario scenario, CancellationToken ct)
     {
         var states = await LoadAllAsync(ct);
@@ -95,6 +101,33 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             ScenarioProjection: ComputeProjection(modified),
             NetSeries: series,
             StreamImpacts: impacts);
+    }
+
+    private static IReadOnlyList<YearlyAggregateView> ComputeYearlyHistory(IReadOnlyList<StreamGrainState> states)
+    {
+        var buckets = new SortedDictionary<int, (decimal Income, decimal Outcome, int Count, HashSet<int> Months)>();
+        foreach (var s in states)
+        {
+            foreach (var e in s.Events)
+            {
+                if (!buckets.TryGetValue(e.OccurredAt.Year, out var b))
+                    b = (0m, 0m, 0, new HashSet<int>());
+                if (s.Direction == Direction.Income) b.Income += e.Amount.Amount;
+                else b.Outcome += e.Amount.Amount;
+                b.Count++;
+                b.Months.Add(e.OccurredAt.Month);
+                buckets[e.OccurredAt.Year] = b;
+            }
+        }
+        return buckets
+            .Select(kv => new YearlyAggregateView(
+                Year: kv.Key,
+                Income: Math.Round(kv.Value.Income, 2),
+                Outcome: Math.Round(kv.Value.Outcome, 2),
+                Net: Math.Round(kv.Value.Income - kv.Value.Outcome, 2),
+                EventCount: kv.Value.Count,
+                MonthsCovered: kv.Value.Months.Count))
+            .ToList();
     }
 
     private static IReadOnlyList<CumulativeBalancePointView> ComputeCumulativeBalance(

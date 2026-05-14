@@ -168,6 +168,17 @@ else
         <CumulativeBalanceChart Data="_balance" />
     </section>
 
+    @if (_yearly.Count >= 2)
+    {
+        <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
+            <div class="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Yearly trend</h2>
+                <p class="text-xs text-zinc-500">Income, outcome and net by calendar year</p>
+            </div>
+            <YearlyBars Data="_yearly" />
+        </section>
+    }
+
     <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
         <div class="flex items-baseline justify-between mb-4">
             <h2 class="text-sm uppercase tracking-wide text-zinc-400">Monthly net — last 12 months</h2>
@@ -308,6 +319,7 @@ else
     private IReadOnlyList<MonthlyAggregateView> _history = [];
     private IReadOnlyList<StreamTrendView> _trends = [];
     private IReadOnlyList<CumulativeBalancePointView> _balance = [];
+    private IReadOnlyList<YearlyAggregateView> _yearly = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -321,6 +333,7 @@ else
             _projection = await Analytics.GetProjectionAsync(CancellationToken.None);
             _retrospective = await Analytics.GetRetrospectiveAsync(CancellationToken.None);
             _balance = await Analytics.GetCumulativeBalanceAsync(6, CancellationToken.None);
+            _yearly = await Analytics.GetYearlyHistoryAsync(CancellationToken.None);
         }
         _loading = false;
     }

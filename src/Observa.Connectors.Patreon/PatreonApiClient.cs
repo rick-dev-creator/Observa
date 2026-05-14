@@ -88,17 +88,18 @@ public sealed class PatreonApiClient(HttpClient http, ILogger<PatreonApiClient> 
     {
         if (attrs.PledgeRelationshipStart is not { } start) return;
 
-        var amountCents = attrs.WillPayAmountCents
-                          ?? attrs.CurrentlyEntitledAmountCents
-                          ?? 0;
-        if (amountCents <= 0) return;
+        // lifetime_support_cents is the authoritative total a patron has actually paid.
+        // Distributing it across their active months yields accurate totals even when the
+        // patron upgraded/downgraded tiers or had declined charges along the way.
+        var lifetimeCents = attrs.LifetimeSupportCents ?? 0;
+        if (lifetimeCents <= 0) return;
 
-        // Active patrons charge through today. Lapsed patrons stop at the last charge.
         var isActive = string.Equals(attrs.PatronStatus, "active_patron", StringComparison.OrdinalIgnoreCase);
         var end = isActive ? DateTimeOffset.UtcNow : attrs.LastChargeDate ?? start;
         if (end < start) return;
 
         var billingDay = start.Day;
+        var billingDates = new List<DateTimeOffset>();
         var cursor = new DateTimeOffset(start.Year, start.Month, 1, 0, 0, 0, TimeSpan.Zero);
         while (cursor <= end)
         {
@@ -106,18 +107,23 @@ public sealed class PatreonApiClient(HttpClient http, ILogger<PatreonApiClient> 
             var chargeDate = new DateTimeOffset(
                 cursor.Year, cursor.Month, Math.Min(billingDay, daysInMonth),
                 0, 0, 0, TimeSpan.Zero);
+            if (chargeDate >= start && chargeDate <= end)
+                billingDates.Add(chargeDate);
+            cursor = cursor.AddMonths(1);
+        }
 
-            // Skip the partial first month if the relationship started after the billing day.
-            if (chargeDate < start) { cursor = cursor.AddMonths(1); continue; }
-            if (chargeDate > end) break;
-            if (since is { } s && chargeDate < s) { cursor = cursor.AddMonths(1); continue; }
+        if (billingDates.Count == 0) return;
 
+        var perMonthUsd = Math.Round(lifetimeCents / 100m / billingDates.Count, 2);
+        if (perMonthUsd <= 0m) return;
+
+        foreach (var chargeDate in billingDates)
+        {
+            if (since is { } s && chargeDate < s) continue;
             sink.Add(new ConnectorFlowEvent(
                 ExternalEventId: $"{memberId}-{chargeDate:yyyyMM}",
                 OccurredAt: chargeDate,
-                AmountUsd: amountCents / 100m));
-
-            cursor = cursor.AddMonths(1);
+                AmountUsd: perMonthUsd));
         }
     }
 
