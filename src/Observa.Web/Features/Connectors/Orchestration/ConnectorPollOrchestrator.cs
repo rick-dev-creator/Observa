@@ -167,39 +167,21 @@ public sealed class ConnectorPollOrchestrator(
             return;
         }
 
+        await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
+
         var ingested = 0;
         await using var scope = scopeFactory.CreateAsyncScope();
         var service = scope.ServiceProvider.GetRequiredService<StreamService>();
 
-        if (!sample.HasPrevious)
-        {
-            // First poll: just establish the baseline.
-            await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
-        }
-        else if (sample.PerformanceDeltaUsd == 0m)
-        {
-            // Flat: no event, but advance the baseline.
-            await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
-        }
-        else
+        if (sample.PerformanceDeltaUsd != 0m)
         {
             var result = await service.IngestEventAsync(
                 StreamId.From(streamId),
                 new IngestEventDto(now, sample.PerformanceDeltaUsd, IngestionSource.Connector,
-                    $"snapshot-{now:yyyyMMddHHmmssfff}"),
-                ct);
-            if (result.IsSuccess)
-            {
-                ingested = 1;
-                // Advance the baseline ONLY after the delta is safely recorded; otherwise the
-                // unrecorded change would be lost from the next delta computation.
-                await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
-            }
-            else
-            {
-                logger.LogWarning("Stream {StreamId} snapshot ingest failed; NOT advancing snapshot state: {Errors}",
-                    streamId, string.Join(",", result.Errors.Select(e => e.ErrorCode)));
-            }
+                    $"snapshot-{now:yyyyMMddHHmmssfff}"), ct);
+            if (result.IsSuccess) ingested = 1;
+            else logger.LogWarning("Stream {StreamId} snapshot ingest failed: {Errors}",
+                streamId, string.Join(",", result.Errors.Select(e => e.ErrorCode)));
         }
 
         var pollResult = await service.RecordPollAsync(StreamId.From(streamId), now, ct);
@@ -211,12 +193,13 @@ public sealed class ConnectorPollOrchestrator(
         {
             Timestamp = now, Kind = "PollCompleted",
             Message = sample.HasPrevious
-                ? $"Snapshot delta {sample.PerformanceDeltaUsd:F2}, ingested {ingested}."
-                : "Snapshot baseline established (no event).",
+                ? $"Snapshot value Δ {sample.PerformanceDeltaUsd:F2}, ingested {ingested}."
+                : $"Snapshot baseline value {sample.PerformanceDeltaUsd:F2}, ingested {ingested}.",
             Details = new Dictionary<string, string>
             {
                 ["HasPrevious"] = sample.HasPrevious.ToString(),
-                ["DeltaUsd"] = sample.PerformanceDeltaUsd.ToString("F2"),
+                ["ValueDeltaUsd"] = sample.PerformanceDeltaUsd.ToString("F2"),
+                ["CapitalBasisUsd"] = sample.CapitalBasisUsd.ToString("F2"),
                 ["Ingested"] = ingested.ToString(),
             },
         });
