@@ -37,4 +37,34 @@ public sealed class SolanaWalletScannerTests
         found[0].Symbol.Should().Be("SOL");
         found[0].ValueUsd.Should().Be(200m);
     }
+
+    [Fact]
+    public async Task ScanAsync_NoPriceSkips_AndFallsBackToShortMintSymbol()
+    {
+        // Holdings: SOL 2.0 (price $100, symbol API returns null → ShortMint fallback);
+        //           MintNOPRICE 50 (no price → skipped).
+        var rpc = new HttpClient(new RoutingStubHttpMessageHandler()
+            .Add((u, b) => b.Contains("getBalance"), """{"jsonrpc":"2.0","result":{"value":2000000000},"id":1}""")
+            .Add((u, b) => b.Contains("getTokenAccountsByOwner"),
+                 """{"jsonrpc":"2.0","result":{"value":[{"account":{"data":{"parsed":{"info":{"mint":"MintNOPRICE","tokenAmount":{"uiAmountString":"50"}}}}}}]},"id":1}"""))
+            { BaseAddress = new Uri("https://rpc.test") };
+
+        var jup = new HttpClient(new RoutingStubHttpMessageHandler()
+            .Add((u, b) => u.Contains("/price/v3") && u.Contains(Sol), "{\"" + Sol + "\":{\"usdPrice\":100}}")
+            .Add((u, b) => u.Contains("/price/v3") && u.Contains("MintNOPRICE"), "{}")
+            .Add((u, b) => u.Contains("/tokens/") && u.Contains(Sol), "{}"))
+            { BaseAddress = new Uri("https://lite-api.jup.ag") };
+
+        var scanner = new SolanaWalletScanner(
+            new SolanaRpcClient(rpc, NullLogger<SolanaRpcClient>.Instance),
+            new JupiterPriceClient(jup, NullLogger<JupiterPriceClient>.Instance),
+            new JupiterTokenClient(jup, NullLogger<JupiterTokenClient>.Instance),
+            NullLogger<SolanaWalletScanner>.Instance);
+
+        var found = await scanner.ScanAsync("Wa11et", minValueUsd: 10m, CancellationToken.None);
+
+        found.Should().ContainSingle();
+        found[0].Mint.Should().Be(Sol);
+        found[0].Symbol.Should().Be("So11…1112");
+    }
 }

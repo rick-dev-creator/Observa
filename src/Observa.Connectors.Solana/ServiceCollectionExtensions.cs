@@ -22,7 +22,7 @@ public static class ServiceCollectionExtensions
         });
         services.AddHttpClient<JupiterPriceClient>(http =>
         {
-            http.BaseAddress = new Uri(accounts.FirstOrDefault()?.JupiterBaseUrl ?? "https://api.jup.ag");
+            http.BaseAddress = new Uri(accounts.FirstOrDefault()?.JupiterBaseUrl ?? "https://lite-api.jup.ag");
             http.Timeout = TimeSpan.FromSeconds(30);
         });
         services.AddHttpClient<JupiterTokenClient>(http =>

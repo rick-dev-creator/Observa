@@ -24,7 +24,7 @@ public sealed class SolanaWalletScanner(
             var symbol = await tokens.GetSymbolAsync(mint, ct) ?? ShortMint(mint);
             found.Add(new DiscoveredToken(mint, symbol, qty, p.Value, Math.Round(value, 2)));
         }
-        logger.LogInformation("Solana scan {Wallet}: {Kept} token(s) >= ${Min}.", wallet, found.Count, minValueUsd);
+        logger.LogInformation("Solana scan {Wallet}: {Kept} token(s) >= ${MinUsd}.", wallet, found.Count, minValueUsd);
         return found;
     }
 
