@@ -39,4 +39,29 @@ public sealed class SolanaRpcClientTests
 
         qty.Should().Be(101.0m);
     }
+
+    [Fact]
+    public async Task GetHoldingsAsync_ReturnsNativeSolAndSplTokens()
+    {
+        var handler = new RoutingStubHttpMessageHandler()
+            .Add((u, b) => b.Contains("getBalance"),
+                 """{"jsonrpc":"2.0","result":{"value":2500000000},"id":1}""")
+            .Add((u, b) => b.Contains("getTokenAccountsByOwner"),
+                 """
+                 {"jsonrpc":"2.0","result":{"value":[
+                   {"account":{"data":{"parsed":{"info":{"mint":"MintAAA","tokenAmount":{"uiAmountString":"100.5"}}}}}},
+                   {"account":{"data":{"parsed":{"info":{"mint":"MintZERO","tokenAmount":{"uiAmountString":"0"}}}}}}
+                 ]},"id":1}
+                 """);
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://rpc.test") };
+        var client = new SolanaRpcClient(http, NullLogger<SolanaRpcClient>.Instance);
+
+        var holdings = await client.GetHoldingsAsync("Wa11et", CancellationToken.None);
+
+        holdings.Should().BeEquivalentTo(new[]
+        {
+            ("So11111111111111111111111111111111111111112", 2.5m),
+            ("MintAAA", 100.5m),
+        });
+    }
 }

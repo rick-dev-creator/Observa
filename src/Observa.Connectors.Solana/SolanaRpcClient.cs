@@ -35,6 +35,39 @@ public sealed class SolanaRpcClient(HttpClient http, ILogger<SolanaRpcClient> lo
             });
     }
 
+    private const string TokenProgram = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+    /// <summary>All holdings (native SOL + SPL tokens with quantity &gt; 0) for a wallet.</summary>
+    public async Task<IReadOnlyList<(string Mint, decimal Quantity)>> GetHoldingsAsync(string wallet, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(wallet)) return [];
+        var holdings = new List<(string, decimal)>();
+
+        var lamports = await RpcCallAsync("getBalance", new object[] { wallet }, ct,
+            root => root.GetProperty("value").GetInt64());
+        var sol = lamports / 1_000_000_000m;
+        if (sol > 0) holdings.Add((SolanaOptions.NativeSolMint, sol));
+
+        var spl = await RpcCallAsync("getTokenAccountsByOwner",
+            new object[] { wallet, new { programId = TokenProgram }, new { encoding = "jsonParsed" } }, ct,
+            root =>
+            {
+                var list = new List<(string, decimal)>();
+                foreach (var acc in root.GetProperty("value").EnumerateArray())
+                {
+                    var info = acc.GetProperty("account").GetProperty("data").GetProperty("parsed").GetProperty("info");
+                    var mint = info.GetProperty("mint").GetString();
+                    var ui = info.GetProperty("tokenAmount").GetProperty("uiAmountString").GetString();
+                    if (mint is not null
+                        && decimal.TryParse(ui, NumberStyles.Any, CultureInfo.InvariantCulture, out var q) && q > 0)
+                        list.Add((mint, q));
+                }
+                return list;
+            });
+        holdings.AddRange(spl);
+        return holdings;
+    }
+
     private async Task<T> RpcCallAsync<T>(string method, object[] @params, CancellationToken ct, Func<JsonElement, T> readResult)
     {
         var req = new { jsonrpc = "2.0", id = 1, method, @params };
