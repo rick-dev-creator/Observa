@@ -10,7 +10,7 @@ public sealed class ConnectorBindingTests
     [Fact]
     public void Create_WithValidValues_Succeeds()
     {
-        var result = ConnectorBinding.Create(new ConnectorId("patreon"), "campaign-123", null);
+        var result = ConnectorBinding.Create(new ConnectorId("patreon"), "campaign-123", null, null);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ConnectorId.Value.Should().Be("patreon");
@@ -21,7 +21,7 @@ public sealed class ConnectorBindingTests
     [Fact]
     public void Create_WithEmptyConnectorId_Fails()
     {
-        var result = ConnectorBinding.Create(new ConnectorId(""), "campaign-123", null);
+        var result = ConnectorBinding.Create(new ConnectorId(""), "campaign-123", null, null);
 
         result.IsFailure.Should().BeTrue();
         result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.ConnectorBinding.ConnectorIdRequired);
@@ -30,7 +30,7 @@ public sealed class ConnectorBindingTests
     [Fact]
     public void Create_WithEmptyExternalRef_Fails()
     {
-        var result = ConnectorBinding.Create(new ConnectorId("patreon"), "", null);
+        var result = ConnectorBinding.Create(new ConnectorId("patreon"), "", null, null);
 
         result.IsFailure.Should().BeTrue();
         result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.ConnectorBinding.ExternalRefRequired);
@@ -40,9 +40,25 @@ public sealed class ConnectorBindingTests
     public void Create_WithLastSync_PreservesIt()
     {
         var ts = DateTimeOffset.Parse("2026-05-13T12:00:00Z");
-        var result = ConnectorBinding.Create(new ConnectorId("patreon"), "campaign-123", ts);
+        var result = ConnectorBinding.Create(new ConnectorId("patreon"), "campaign-123", ts, null);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.LastSync.Should().Be(ts);
+    }
+
+    [Fact]
+    public void Create_DefaultsSnapshotStateToNull()
+    {
+        var binding = ConnectorBinding.Create(new ConnectorId("solana"), "mint123", null, null).Value;
+        binding.SnapshotState.Should().BeNull();
+    }
+
+    [Fact]
+    public void WithSnapshotState_SetsValueAndPreservesEquality()
+    {
+        var binding = ConnectorBinding.Create(new ConnectorId("solana"), "mint123", null, null).Value;
+        var withState = binding with { SnapshotState = "{\"q\":1,\"p\":2}" };
+        withState.SnapshotState.Should().Be("{\"q\":1,\"p\":2}");
+        withState.ExternalRef.Should().Be("mint123");
     }
 }

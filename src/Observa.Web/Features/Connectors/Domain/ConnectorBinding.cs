@@ -13,10 +13,11 @@ public sealed partial record ConnectorBinding : ValueObject
     public ConnectorId ConnectorId { get; init; }
     public string ExternalRef { get; init; } = "";
     public DateTimeOffset? LastSync { get; init; }
+    public string? SnapshotState { get; init; }
 
     private ConnectorBinding() { }
 
-    private static partial Result __ValidateConstruction(ConnectorId connectorId, string externalRef, DateTimeOffset? lastSync)
+    private static partial Result __ValidateConstruction(ConnectorId connectorId, string externalRef, DateTimeOffset? lastSync, string? snapshotState)
     {
         var errors = new List<IError>();
         if (string.IsNullOrWhiteSpace(connectorId.Value))

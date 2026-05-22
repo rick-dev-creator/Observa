@@ -26,7 +26,7 @@ public sealed class StreamAggregateTests
         new(DateTimeOffset.UtcNow, amount, IngestionSource.Manual);
 
     private static ConnectorBinding TestBinding(DateTimeOffset? lastSync = null) =>
-        ConnectorBinding.Create(new ConnectorId("test"), "ext-ref-1", lastSync).Match(
+        ConnectorBinding.Create(new ConnectorId("test"), "ext-ref-1", lastSync, null).Match(
             b => b,
             _ => throw new InvalidOperationException("test ConnectorBinding setup invalid"));
 
