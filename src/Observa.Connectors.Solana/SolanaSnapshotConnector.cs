@@ -23,8 +23,7 @@ public sealed class SolanaSnapshotConnector : ISnapshotConnector
         Id = new ConnectorId(options.Id);
         Metadata = new ConnectorMetadata(
             DisplayName: string.IsNullOrWhiteSpace(options.DisplayName) ? $"Solana ({options.Id})" : $"Solana — {options.DisplayName}",
-            Description: "Tracks the USD value of a Solana token holding and records its capital-netted change " +
-                         "(price movement on held quantity) as Performance flow events.",
+            Description: "Tracks the current USD market value of a Solana token holding (net = quantity × price) and records its change over time as Performance flow events.",
             PollInterval: options.PollInterval,
             ConfigSchema:
             [
@@ -66,7 +65,7 @@ public sealed class SolanaSnapshotConnector : ISnapshotConnector
         {
             var capital0 = Math.Round(value, 2);
             return new SnapshotSample(SnapshotStateCodec.Serialize(quantity, price, capital0),
-                Math.Round(value, 2), HasPrevious: false, capital0);
+                capital0, HasPrevious: false, capital0);
         }
 
         var prevValue = prev.Value.Quantity * prev.Value.Price;

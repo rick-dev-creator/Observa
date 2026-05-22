@@ -55,4 +55,16 @@ public sealed class SolanaSnapshotConnectorTests
         s.PerformanceDeltaUsd.Should().Be(300m);   // 500 − 200
         s.CapitalBasisUsd.Should().Be(500m);        // 200 + 3·100
     }
+
+    [Fact]
+    public async Task PriceUnavailable_PreservesPreviousState_NoEmit_KeepsCapital()
+    {
+        var prev = SnapshotStateCodec.Serialize(2m, 100m, 200m);
+        var c = Build(Lamports(5_000_000_000), "{}"); // empty Jupiter → no price
+        var s = await c.SampleAsync(new SnapshotContext(Guid.NewGuid(), Mint, prev), CancellationToken.None);
+        s.HasPrevious.Should().BeFalse();
+        s.PerformanceDeltaUsd.Should().Be(0m);
+        s.State.Should().Be(prev);          // previous state preserved unchanged
+        s.CapitalBasisUsd.Should().Be(200m); // previous capital preserved
+    }
 }
