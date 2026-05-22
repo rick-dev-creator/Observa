@@ -56,8 +56,9 @@ public sealed class SolanaRpcClient(HttpClient http, ILogger<SolanaRpcClient> lo
                 foreach (var acc in root.GetProperty("value").EnumerateArray())
                 {
                     var info = acc.GetProperty("account").GetProperty("data").GetProperty("parsed").GetProperty("info");
-                    var mint = info.GetProperty("mint").GetString();
-                    var ui = info.GetProperty("tokenAmount").GetProperty("uiAmountString").GetString();
+                    var mint = info.TryGetProperty("mint", out var m) ? m.GetString() : null;
+                    var ui = info.TryGetProperty("tokenAmount", out var ta) && ta.TryGetProperty("uiAmountString", out var us)
+                        ? us.GetString() : null;
                     if (mint is not null
                         && decimal.TryParse(ui, NumberStyles.Any, CultureInfo.InvariantCulture, out var q) && q > 0)
                         list.Add((mint, q));
