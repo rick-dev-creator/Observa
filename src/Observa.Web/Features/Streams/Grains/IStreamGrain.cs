@@ -6,6 +6,7 @@ public interface IStreamGrain : IGrainWithGuidKey
     Task WriteAsync(StreamGrainState newState, ActivityLogEntry? logEntry = null);
     Task LogActivityAsync(ActivityLogEntry entry);
     Task MarkPolledAsync(DateTimeOffset at);
+    Task SetConnectorSnapshotStateAsync(string? snapshotState);
     Task EnsureConnectorPollReminderAsync(TimeSpan pollInterval);
     Task RemoveConnectorPollReminderAsync();
 }

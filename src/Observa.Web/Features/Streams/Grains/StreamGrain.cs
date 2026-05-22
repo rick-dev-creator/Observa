@@ -38,6 +38,13 @@ public sealed class StreamGrain(
         await state.WriteStateAsync();
     }
 
+    public async Task SetConnectorSnapshotStateAsync(string? snapshotState)
+    {
+        if (state.State.Binding is null) return;
+        state.State.Binding.SnapshotState = snapshotState;
+        await state.WriteStateAsync();
+    }
+
     public async Task EnsureConnectorPollReminderAsync(TimeSpan pollInterval)
     {
         if (pollInterval <= TimeSpan.Zero) return;
