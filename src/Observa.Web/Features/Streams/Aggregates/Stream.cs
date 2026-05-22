@@ -70,8 +70,16 @@ public partial class Stream : AggregateRoot<StreamId>
     {
         if (Status != StreamStatus.Active)
             return new BusinessRuleError(DomainErrors.Stream.NotActive, $"Stream must be Active to ingest events; current status is {Status}.");
-        if (dto.Amount <= 0)
+
+        if (Direction == Direction.Performance)
+        {
+            if (dto.Amount == 0)
+                return new ValidationError(DomainErrors.FlowEvent.AmountZero, "Performance event amount must be non-zero.", nameof(dto.Amount));
+        }
+        else if (dto.Amount <= 0)
+        {
             return new ValidationError(DomainErrors.FlowEvent.AmountNotPositive, "Flow event amount must be positive.", nameof(dto.Amount));
+        }
 
         if (dto.ExternalRef is { Length: > 0 } extRef
             && _events.Any(e => e.ExternalRef == extRef))
@@ -81,7 +89,9 @@ public partial class Stream : AggregateRoot<StreamId>
                 $"Flow event with external ref '{extRef}' already ingested.");
         }
 
-        var moneyResult = Money.Create(dto.Amount);
+        var moneyResult = Direction == Direction.Performance
+            ? Money.CreateSigned(dto.Amount)
+            : Money.Create(dto.Amount);
         if (moneyResult.IsFailure)
             return Result<FlowEventIngested>.Failure(moneyResult.Errors);
 

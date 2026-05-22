@@ -13,7 +13,7 @@
                              Name="@name"
                              SeriesType="SeriesType.Bar"
                              XValue="@(p => p.Label)"
-                             YValue="@(p => direction == Direction.Income ? p.Amount : -p.Amount)" />
+                             YValue="@(p => direction == Direction.Performance ? p.Amount : (direction == Direction.Income ? p.Amount : -p.Amount))" />
         }
 
         @if (_netSeries.Count > 0)
@@ -57,7 +57,7 @@
                 StreamId: Guid.Empty,
                 StreamName: "Net",
                 Direction: Direction.Income,
-                Amount: Math.Round(g.Sum(p => p.Direction == Direction.Income ? p.Amount : -p.Amount), 2)))
+                Amount: Math.Round(g.Sum(p => p.Direction == Direction.Performance ? p.Amount : (p.Direction == Direction.Income ? p.Amount : -p.Amount)), 2)))
             .ToList();
 
         _options = new ApexChartOptions<YearlyStreamPointView>

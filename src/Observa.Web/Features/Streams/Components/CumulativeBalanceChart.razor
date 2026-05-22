@@ -8,15 +8,27 @@
 
         <ApexPointSeries TItem="CumulativeBalancePointView"
                          Items="Data"
-                         Name="Balance"
+                         Name="Stable"
                          SeriesType="SeriesType.Area"
                          XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
-                         YValue="@(p => p.Balance)" />
+                         YValue="@(p => p.StableBalance)" />
+
+        @if (HasPerformance)
+        {
+            <ApexPointSeries TItem="CumulativeBalancePointView"
+                             Items="Data"
+                             Name="Performance"
+                             SeriesType="SeriesType.Area"
+                             XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                             YValue="@(p => p.VolatileBalance)" />
+        }
     </ApexChart>
 </div>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<CumulativeBalancePointView> Data { get; set; } = [];
+
+    private bool HasPerformance => Data?.Any(p => p.VolatileBalance != 0m) == true;
 
     private ApexChartOptions<CumulativeBalancePointView> _options = null!;
 
@@ -35,16 +47,17 @@
                 Animations = new Animations { Enabled = true, Speed = 400 },
                 FontFamily = "ui-sans-serif, system-ui",
                 Zoom = new Zoom { Enabled = false },
+                Stacked = true,
             },
-            Colors = new List<string> { "#10b981" },
+            Colors = new List<string> { "#10b981", "#f59e0b" },
             Stroke = new Stroke
             {
-                Curve = new List<Curve> { Curve.Smooth },
-                Width = new List<double> { 2.5 },
+                Curve = new List<Curve> { Curve.Smooth, Curve.Smooth },
+                Width = new List<double> { 2.5, 2.5 },
             },
             Fill = new Fill
             {
-                Type = new List<FillType> { FillType.Gradient },
+                Type = new List<FillType> { FillType.Gradient, FillType.Gradient },
                 Gradient = new FillGradient
                 {
                     ShadeIntensity = 1,
@@ -81,9 +94,11 @@
             Tooltip = new Tooltip
             {
                 Theme = Mode.Dark,
+                Shared = true,
+                Intersect = false,
                 Y = new TooltipY { Formatter = "function(val) { return '$' + Math.round(val).toLocaleString('en-US'); }" },
             },
-            Legend = new Legend { Show = false },
+            Legend = new Legend { Show = true, Position = LegendPosition.Top, HorizontalAlign = Align.Right },
             DataLabels = new DataLabels { Enabled = false },
             Annotations = lastHistorical is not null && firstProjected is not null
                 ? new Annotations

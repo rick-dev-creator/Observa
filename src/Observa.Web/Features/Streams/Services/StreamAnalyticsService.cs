@@ -9,6 +9,15 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
     private const decimal VolatilityThreshold = 0.30m; // stddev/mean > 30% → Volatile
     private const decimal SteadyThresholdPctOfAvg = 0.05m;
 
+    // Income adds, Outcome subtracts, Performance is already stored signed so it adds as-is.
+    internal static decimal SignedNet(Direction direction, decimal amount) => direction switch
+    {
+        Direction.Income => amount,
+        Direction.Outcome => -amount,
+        Direction.Performance => amount,
+        _ => 0m,
+    };
+
     public async Task<MonthSummaryView> GetCurrentMonthAsync(CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
         var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
@@ -119,7 +128,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             var bAvg = b.RecentAverage ?? 0m;
             decimal? sAvg = scenarioTrends.TryGetValue(id, out var s) ? s.RecentAverage : null;
             var sAvgValue = sAvg ?? 0m;
-            var sign = b.Direction == Direction.Income ? 1m : -1m;
+            var sign = b.Direction == Direction.Outcome ? -1m : 1m; // Income and Performance → +1, Outcome → −1
             var delta = (sAvgValue - bAvg) * sign;
             if (Math.Abs(delta) < 0.01m) continue;
             impacts.Add(new StreamImpactView(id, b.Name, b.Direction, bAvg, sAvg, delta));
@@ -206,15 +215,16 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
 
     private static IReadOnlyList<YearlyAggregateView> ComputeYearlyHistory(IReadOnlyList<StreamGrainState> states)
     {
-        var buckets = new SortedDictionary<int, (decimal Income, decimal Outcome, int Count, HashSet<int> Months)>();
+        var buckets = new SortedDictionary<int, (decimal Income, decimal Outcome, decimal Performance, int Count, HashSet<int> Months)>();
         foreach (var s in states)
         {
             foreach (var e in s.Events)
             {
                 if (!buckets.TryGetValue(e.OccurredAt.Year, out var b))
-                    b = (0m, 0m, 0, new HashSet<int>());
+                    b = (0m, 0m, 0m, 0, new HashSet<int>());
                 if (s.Direction == Direction.Income) b.Income += e.Amount.Amount;
-                else b.Outcome += e.Amount.Amount;
+                else if (s.Direction == Direction.Outcome) b.Outcome += e.Amount.Amount;
+                else if (s.Direction == Direction.Performance) b.Performance += e.Amount.Amount;
                 b.Count++;
                 b.Months.Add(e.OccurredAt.Month);
                 buckets[e.OccurredAt.Year] = b;
@@ -225,9 +235,10 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
                 Year: kv.Key,
                 Income: Math.Round(kv.Value.Income, 2),
                 Outcome: Math.Round(kv.Value.Outcome, 2),
-                Net: Math.Round(kv.Value.Income - kv.Value.Outcome, 2),
+                Net: Math.Round(kv.Value.Income - kv.Value.Outcome + kv.Value.Performance, 2),
                 EventCount: kv.Value.Count,
-                MonthsCovered: kv.Value.Months.Count))
+                MonthsCovered: kv.Value.Months.Count,
+                Performance: Math.Round(kv.Value.Performance, 2)))
             .ToList();
     }
 
@@ -248,11 +259,11 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var historicalMonths = (int)Math.Round((currentMonth - firstMonth).TotalDays / 30.44) + 1;
         if (historicalMonths < 1) historicalMonths = 1;
 
-        var buckets = new SortedDictionary<(int Y, int M), (decimal Income, decimal Outcome)>();
+        var buckets = new SortedDictionary<(int Y, int M), (decimal Income, decimal Outcome, decimal Performance)>();
         for (var i = 0; i < historicalMonths; i++)
         {
             var d = firstMonth.AddMonths(i);
-            buckets[(d.Year, d.Month)] = (0m, 0m);
+            buckets[(d.Year, d.Month)] = (0m, 0m, 0m);
         }
 
         foreach (var s in states)
@@ -262,32 +273,45 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
                 var key = (e.OccurredAt.Year, e.OccurredAt.Month);
                 if (!buckets.TryGetValue(key, out var b)) continue;
                 if (s.Direction == Direction.Income) b.Income += e.Amount.Amount;
-                else b.Outcome += e.Amount.Amount;
+                else if (s.Direction == Direction.Outcome) b.Outcome += e.Amount.Amount;
+                else if (s.Direction == Direction.Performance) b.Performance += e.Amount.Amount;
                 buckets[key] = b;
             }
         }
 
-        var monthlyNets = buckets.Select(kv => (Key: kv.Key, Net: kv.Value.Income - kv.Value.Outcome)).ToList();
+        var bucketList = buckets.ToList();
 
-        var completePast = monthlyNets.Count > 1
-            ? monthlyNets.Take(monthlyNets.Count - 1).Select(m => m.Net).ToArray()
-            : Array.Empty<decimal>();
-        var avgNet = completePast.Length > 0 ? completePast.Average() : 0m;
+        var completePast = bucketList.Count > 1
+            ? bucketList.Take(bucketList.Count - 1).ToArray()
+            : Array.Empty<KeyValuePair<(int Y, int M), (decimal Income, decimal Outcome, decimal Performance)>>();
+        var avgStableNet = completePast.Length > 0 ? completePast.Average(m => m.Value.Income - m.Value.Outcome) : 0m;
+        var avgPerformance = completePast.Length > 0 ? completePast.Average(m => m.Value.Performance) : 0m;
+        var avgNet = avgStableNet + avgPerformance;
 
-        var points = new List<CumulativeBalancePointView>(monthlyNets.Count + futureMonths);
-        decimal running = 0m;
-        foreach (var (key, net) in monthlyNets)
+        var points = new List<CumulativeBalancePointView>(bucketList.Count + futureMonths);
+        decimal runningStable = 0m, runningVolatile = 0m;
+        foreach (var kv in bucketList)
         {
-            running += net;
-            var ts = new DateTimeOffset(key.Y, key.M, 1, 0, 0, 0, TimeSpan.Zero);
-            points.Add(new CumulativeBalancePointView(ts.ToString("MMM yy"), ts, Math.Round(running, 2), IsProjected: false));
+            runningStable += kv.Value.Income - kv.Value.Outcome;
+            runningVolatile += kv.Value.Performance;
+            var ts = new DateTimeOffset(kv.Key.Y, kv.Key.M, 1, 0, 0, 0, TimeSpan.Zero);
+            var stable = Math.Round(runningStable, 2);
+            var volatile_ = Math.Round(runningVolatile, 2);
+            points.Add(new CumulativeBalancePointView(
+                ts.ToString("MMM yy"), ts, stable + volatile_, IsProjected: false,
+                stable, volatile_));
         }
 
         for (var i = 1; i <= futureMonths; i++)
         {
-            running += avgNet;
+            runningStable += avgStableNet;
+            runningVolatile += avgPerformance;
             var d = currentMonth.AddMonths(i);
-            points.Add(new CumulativeBalancePointView(d.ToString("MMM yy"), d, Math.Round(running, 2), IsProjected: true));
+            var stable = Math.Round(runningStable, 2);
+            var volatile_ = Math.Round(runningVolatile, 2);
+            points.Add(new CumulativeBalancePointView(
+                d.ToString("MMM yy"), d, stable + volatile_, IsProjected: true,
+                stable, volatile_));
         }
 
         return points;
@@ -299,7 +323,8 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var complete = history.SkipLast(1).ToArray();
         var avgIncome = complete.Length > 0 ? complete.Average(m => m.Income) : 0m;
         var avgOutcome = complete.Length > 0 ? complete.Average(m => m.Outcome) : 0m;
-        var avgNet = avgIncome - avgOutcome;
+        var avgPerformance = complete.Length > 0 ? complete.Average(m => m.Performance) : 0m;
+        var avgNet = avgIncome - avgOutcome + avgPerformance;
 
         var now = DateTimeOffset.UtcNow;
         var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
@@ -308,20 +333,22 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         {
             var d = anchor.AddMonths(i);
             result.Add(new MonthlyAggregateView(d.Year, d.Month,
-                Math.Round(avgIncome, 2), Math.Round(avgOutcome, 2), Math.Round(avgNet, 2), 0));
+                Math.Round(avgIncome, 2), Math.Round(avgOutcome, 2), Math.Round(avgNet, 2), 0,
+                Math.Round(avgPerformance, 2)));
         }
         return result;
     }
 
-    private static MonthSummaryView ComputeCurrentMonth(IReadOnlyList<StreamGrainState> states)
+    internal static MonthSummaryView ComputeCurrentMonth(IReadOnlyList<StreamGrainState> states)
     {
         var now = DateTimeOffset.UtcNow;
         var startThisMonth = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var startPrevMonth = startThisMonth.AddMonths(-1);
         var endThisMonth = startThisMonth.AddMonths(1);
 
-        decimal income = 0, outcome = 0;
-        decimal prevIncomeSamePoint = 0, prevOutcomeSamePoint = 0;
+        // Per-direction accumulators are kept because views expose Income/Outcome separately; net = Income - Outcome + Performance.
+        decimal income = 0, outcome = 0, performance = 0;
+        decimal prevIncomeSamePoint = 0, prevOutcomeSamePoint = 0, prevPerformanceSamePoint = 0;
         var prevSamePoint = startPrevMonth.AddDays((now - startThisMonth).TotalDays);
 
         foreach (var s in states)
@@ -331,18 +358,20 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
                 if (e.OccurredAt >= startThisMonth && e.OccurredAt < endThisMonth)
                 {
                     if (s.Direction == Direction.Income) income += e.Amount.Amount;
-                    else outcome += e.Amount.Amount;
+                    else if (s.Direction == Direction.Outcome) outcome += e.Amount.Amount;
+                    else if (s.Direction == Direction.Performance) performance += e.Amount.Amount;
                 }
                 else if (e.OccurredAt >= startPrevMonth && e.OccurredAt < prevSamePoint)
                 {
                     if (s.Direction == Direction.Income) prevIncomeSamePoint += e.Amount.Amount;
-                    else prevOutcomeSamePoint += e.Amount.Amount;
+                    else if (s.Direction == Direction.Outcome) prevOutcomeSamePoint += e.Amount.Amount;
+                    else if (s.Direction == Direction.Performance) prevPerformanceSamePoint += e.Amount.Amount;
                 }
             }
         }
 
-        var net = income - outcome;
-        var prevNet = prevIncomeSamePoint - prevOutcomeSamePoint;
+        var net = income - outcome + performance;
+        var prevNet = prevIncomeSamePoint - prevOutcomeSamePoint + prevPerformanceSamePoint;
         var daysIntoMonth = Math.Max(1, (int)Math.Ceiling((now - startThisMonth).TotalDays));
         var daysInMonth = DateTime.DaysInMonth(now.Year, now.Month);
         var onTrack = daysIntoMonth > 0 ? net * daysInMonth / daysIntoMonth : (decimal?)null;
@@ -357,22 +386,24 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             PreviousMonthSamePoint: prevNet,
             Delta: net - prevNet,
             DaysIntoMonth: daysIntoMonth,
-            DaysInMonth: daysInMonth);
+            DaysInMonth: daysInMonth,
+            PerformanceMTD: performance);
     }
 
-    private static IReadOnlyList<MonthlyAggregateView> ComputeMonthlyHistory(IReadOnlyList<StreamGrainState> states, int months)
+    internal static IReadOnlyList<MonthlyAggregateView> ComputeMonthlyHistory(IReadOnlyList<StreamGrainState> states, int months)
     {
         var now = DateTimeOffset.UtcNow;
         var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
-        var buckets = new SortedDictionary<(int Y, int M), (decimal Income, decimal Outcome, int Count)>();
+        var buckets = new SortedDictionary<(int Y, int M), (decimal Income, decimal Outcome, decimal Performance, int Count)>();
 
         for (var i = months - 1; i >= 0; i--)
         {
             var d = anchor.AddMonths(-i);
-            buckets[(d.Year, d.Month)] = (0m, 0m, 0);
+            buckets[(d.Year, d.Month)] = (0m, 0m, 0m, 0);
         }
 
         var floor = anchor.AddMonths(-(months - 1));
+        // Per-direction accumulators are kept because views expose Income/Outcome separately; net = Income - Outcome + Performance.
         foreach (var s in states)
         {
             foreach (var e in s.Events)
@@ -381,7 +412,8 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
                 var key = (e.OccurredAt.Year, e.OccurredAt.Month);
                 if (!buckets.TryGetValue(key, out var bucket)) continue;
                 if (s.Direction == Direction.Income) bucket.Income += e.Amount.Amount;
-                else bucket.Outcome += e.Amount.Amount;
+                else if (s.Direction == Direction.Outcome) bucket.Outcome += e.Amount.Amount;
+                else if (s.Direction == Direction.Performance) bucket.Performance += e.Amount.Amount;
                 bucket.Count++;
                 buckets[key] = bucket;
             }
@@ -389,11 +421,12 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
 
         return buckets
             .Select(kv => new MonthlyAggregateView(kv.Key.Y, kv.Key.M, kv.Value.Income, kv.Value.Outcome,
-                                                   kv.Value.Income - kv.Value.Outcome, kv.Value.Count))
+                                                   kv.Value.Income - kv.Value.Outcome + kv.Value.Performance,
+                                                   kv.Value.Count, kv.Value.Performance))
             .ToList();
     }
 
-    private static IReadOnlyList<StreamTrendView> ComputeStreamTrends(IReadOnlyList<StreamGrainState> states, int sparklineMonths)
+    internal static IReadOnlyList<StreamTrendView> ComputeStreamTrends(IReadOnlyList<StreamGrainState> states, int sparklineMonths)
     {
         var now = DateTimeOffset.UtcNow;
         var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
@@ -413,10 +446,13 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
 
             decimal? lastMonth = buckets.Length >= 2 ? buckets[^2] : null;
 
-            var nonZero = buckets.Where(b => b > 0).ToArray();
+            var nonZero = s.Direction == Direction.Performance
+                ? buckets.Where(b => b != 0).ToArray()
+                : buckets.Where(b => b > 0).ToArray();
             decimal? avg = nonZero.Length > 0 ? nonZero.Average() : null;
 
-            var (slope, label, detail) = ClassifyTrend(buckets);
+            var includeNegatives = s.Direction == Direction.Performance;
+            var (slope, label, detail) = ClassifyTrend(buckets, includeNegatives);
 
             trends.Add(new StreamTrendView(
                 Id: s.Id,
@@ -439,7 +475,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             .ToList();
     }
 
-    private static ProjectionView ComputeProjection(IReadOnlyList<StreamGrainState> states)
+    internal static ProjectionView ComputeProjection(IReadOnlyList<StreamGrainState> states)
     {
         var monthly = ComputeMonthlyHistory(states, months: 12);
         var current = ComputeCurrentMonth(states);
@@ -451,6 +487,11 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var avgNet = completeMonths.Length > 0 ? completeMonths.Average(m => m.Net) : 0m;
         var stddev = completeMonths.Length > 1 ? StdDev(completeMonths.Select(m => m.Net).ToArray()) : 0m;
 
+        // Net includes signed Performance, so stddev already reflects volatile streams.
+        // Report ~P5–P95 (1.65σ) so volatile assets read as uncertain (wider than a 1σ band).
+        const decimal BandSigma = 1.65m;
+        var uncertaintyBand = BandSigma * stddev;
+
         var monthsToYearEnd = Math.Max(0, 12 - DateTimeOffset.UtcNow.Month);
 
         var eom = current.OnTrackEom;
@@ -458,7 +499,6 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var yearEnd = (current.NetMTD == 0 ? avgNet : current.OnTrackEom ?? avgNet) + avgNet * monthsToYearEnd;
 
         var avgOutcome = completeMonths.Length > 0 ? completeMonths.Average(m => m.Outcome) : 0m;
-        var avgIncome = completeMonths.Length > 0 ? completeMonths.Average(m => m.Income) : 0m;
 
         int? runway = null;
         string runwayMessage;
@@ -466,15 +506,17 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         {
             runwayMessage = "No outflows on record yet.";
         }
-        else if (avgIncome >= avgOutcome)
+        else if (avgNet >= 0)
         {
-            runwayMessage = avgIncome > avgOutcome
+            // avgNet already folds in Performance (signed), so a positive net means no burn.
+            runwayMessage = avgNet > 0
                 ? "You earn more than you spend — no runway concern."
                 : "You break even — no runway concern.";
         }
         else
         {
-            var burn = avgOutcome - avgIncome;
+            // avgNet < 0: net burn per month.
+            var burn = -avgNet;
             var assumedSavings = avgNet * Math.Max(completeMonths.Length, 1);
             runway = (int)Math.Max(0, Math.Floor(assumedSavings / burn));
             runwayMessage = $"Spending exceeds income by ~${burn:N0}/month.";
@@ -484,7 +526,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             EndOfMonth: Math.Round(eom ?? avgNet, 2),
             ThreeMonthsAhead: Math.Round(threeMonth, 2),
             YearEnd: monthsToYearEnd == 0 ? Math.Round(eom ?? avgNet, 2) : Math.Round(yearEnd, 2),
-            Uncertainty: Math.Round(stddev, 2),
+            Uncertainty: Math.Round(uncertaintyBand, 2),
             RunwayMonths: runway,
             RunwayMessage: runwayMessage);
     }
@@ -496,8 +538,8 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var prevYtdStart = new DateTimeOffset(now.Year - 1, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var prevYearSamePoint = prevYtdStart.AddDays((now - ytdStart).TotalDays);
 
-        decimal ytdIncome = 0, ytdOutcome = 0;
-        decimal prevYtdIncome = 0, prevYtdOutcome = 0;
+        decimal ytdIncome = 0, ytdOutcome = 0, ytdPerformance = 0;
+        decimal prevYtdIncome = 0, prevYtdOutcome = 0, prevYtdPerformance = 0;
         var monthlyNets = new Dictionary<(int Y, int M), decimal>();
         var hasPrevYearData = false;
 
@@ -505,18 +547,20 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         {
             foreach (var e in s.Events)
             {
-                var signed = s.Direction == Direction.Income ? e.Amount.Amount : -e.Amount.Amount;
+                var signed = SignedNet(s.Direction, e.Amount.Amount);
 
                 if (e.OccurredAt >= ytdStart && e.OccurredAt < now)
                 {
                     if (s.Direction == Direction.Income) ytdIncome += e.Amount.Amount;
-                    else ytdOutcome += e.Amount.Amount;
+                    else if (s.Direction == Direction.Outcome) ytdOutcome += e.Amount.Amount;
+                    else if (s.Direction == Direction.Performance) ytdPerformance += e.Amount.Amount;
                 }
                 else if (e.OccurredAt >= prevYtdStart && e.OccurredAt < prevYearSamePoint)
                 {
                     hasPrevYearData = true;
                     if (s.Direction == Direction.Income) prevYtdIncome += e.Amount.Amount;
-                    else prevYtdOutcome += e.Amount.Amount;
+                    else if (s.Direction == Direction.Outcome) prevYtdOutcome += e.Amount.Amount;
+                    else if (s.Direction == Direction.Performance) prevYtdPerformance += e.Amount.Amount;
                 }
 
                 var key = (e.OccurredAt.Year, e.OccurredAt.Month);
@@ -525,8 +569,8 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             }
         }
 
-        var ytdNet = ytdIncome - ytdOutcome;
-        var prevYtdNet = prevYtdIncome - prevYtdOutcome;
+        var ytdNet = ytdIncome - ytdOutcome + ytdPerformance;
+        var prevYtdNet = prevYtdIncome - prevYtdOutcome + prevYtdPerformance;
 
         var completeMonths = monthlyNets
             .Where(kv => !(kv.Key.Y == now.Year && kv.Key.M == now.Month))
@@ -551,7 +595,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             WorstMonth: worst);
     }
 
-    private static IReadOnlyList<StreamGrainState> ApplyScenario(
+    internal static IReadOnlyList<StreamGrainState> ApplyScenario(
         IReadOnlyList<StreamGrainState> states,
         Scenario scenario)
     {
@@ -581,7 +625,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
                 {
                     Id = e.Id,
                     OccurredAt = e.OccurredAt,
-                    Amount = new MoneyState { Amount = Math.Max(0m, e.Amount.Amount * factor) },
+                    Amount = new MoneyState { Amount = s.Direction == Direction.Performance ? e.Amount.Amount * factor : Math.Max(0m, e.Amount.Amount * factor) },
                     Source = e.Source,
                     ExternalRef = e.ExternalRef,
                 }).ToList(),
@@ -605,9 +649,11 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         return states;
     }
 
-    private static (decimal? Slope, string Label, string Detail) ClassifyTrend(decimal[] series)
+    private static (decimal? Slope, string Label, string Detail) ClassifyTrend(decimal[] series, bool includeNegatives = false)
     {
-        var nonZero = series.Where(s => s > 0).ToArray();
+        var nonZero = includeNegatives
+            ? series.Where(s => s != 0).ToArray()
+            : series.Where(s => s > 0).ToArray();
         if (nonZero.Length < 3) return (null, "Insufficient data", "");
 
         var n = nonZero.Length;
@@ -619,10 +665,14 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var slope = den == 0 ? 0m : num / den;
 
         var stddev = StdDev(nonZero);
-        var cv = meanY > 0 ? stddev / meanY : 0m;
+        // For Performance with mixed signs, meanY may be near zero or negative — use Math.Abs for CV denominator.
+        var absMeanY = Math.Abs(meanY);
+        var cv = absMeanY > 0 ? stddev / absMeanY : 0m;
         if (cv > VolatilityThreshold) return (slope, "Volatile", "varies a lot");
 
-        var threshold = meanY * SteadyThresholdPctOfAvg;
+        // Steady/trending comparisons: use absMeanY to avoid nonsense when meanY <= 0.
+        if (absMeanY <= 0) return (slope, "Steady", "consistent month over month");
+        var threshold = absMeanY * SteadyThresholdPctOfAvg;
         if (Math.Abs(slope) < threshold) return (slope, "Steady", "consistent month over month");
 
         var sign = slope > 0 ? "Trending up" : "Trending down";

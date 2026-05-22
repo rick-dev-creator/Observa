@@ -4,4 +4,5 @@ public enum Direction
 {
     Income,
     Outcome,
+    Performance,
 }

@@ -6,7 +6,8 @@ public sealed record YearlyAggregateView(
     decimal Outcome,
     decimal Net,
     int EventCount,
-    int MonthsCovered)
+    int MonthsCovered,
+    decimal Performance = 0m)
 {
     public decimal AverageMonthlyNet => MonthsCovered > 0 ? Net / MonthsCovered : 0m;
     public string Label => Year.ToString();

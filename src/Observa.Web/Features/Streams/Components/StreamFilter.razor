@@ -11,6 +11,11 @@
             <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Income))">Income only</button>
             <span class="text-zinc-700">|</span>
             <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Outcome))">Outcome only</button>
+            @if (Streams.Any(s => s.Direction == Direction.Performance))
+            {
+                <span class="text-zinc-700">|</span>
+                <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Performance))">Performance only</button>
+            }
         </div>
     </div>
     <div class="flex flex-wrap gap-2">
@@ -21,7 +26,7 @@
                     class="@ChipClass(s, on)"
                     @onclick="@(() => Toggle(s.Id))">
                 @s.Name
-                <span class="text-xs opacity-70 ml-1">@(s.Direction == Direction.Income ? "+" : "−")</span>
+                <span class="text-xs opacity-70 ml-1">@(s.Direction == Direction.Income ? "+" : s.Direction == Direction.Performance ? "±" : "−")</span>
             </button>
         }
     </div>
@@ -74,8 +79,11 @@
         var baseCls = "px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors";
         if (!on)
             return $"{baseCls} bg-zinc-900 text-zinc-500 border border-zinc-800 hover:border-zinc-600";
-        return s.Direction == Direction.Income
-            ? $"{baseCls} bg-emerald-900/40 text-emerald-200 border border-emerald-700/50"
-            : $"{baseCls} bg-rose-900/40 text-rose-200 border border-rose-700/50";
+        return s.Direction switch
+        {
+            Direction.Income => $"{baseCls} bg-emerald-900/40 text-emerald-200 border border-emerald-700/50",
+            Direction.Performance => $"{baseCls} bg-amber-900/40 text-amber-200 border border-amber-700/50",
+            _ => $"{baseCls} bg-rose-900/40 text-rose-200 border border-rose-700/50",
+        };
     }
 }

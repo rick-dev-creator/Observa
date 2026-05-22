@@ -16,6 +16,7 @@ public static class DomainErrors
     public static class FlowEvent
     {
         public const string AmountNotPositive = "FLOW_EVENT_AMOUNT_NOT_POSITIVE";
+        public const string AmountZero = "FLOW_EVENT_AMOUNT_ZERO";
         public const string Duplicate = "FLOW_EVENT_DUPLICATE_EXTERNAL_REF";
     }
 

@@ -6,7 +6,8 @@ public sealed record MonthlyAggregateView(
     decimal Income,
     decimal Outcome,
     decimal Net,
-    int EventCount)
+    int EventCount,
+    decimal Performance = 0m)
 {
     public DateTimeOffset StartOfMonth => new(Year, Month, 1, 0, 0, 0, TimeSpan.Zero);
     public string Label => StartOfMonth.ToString("MMM yy");

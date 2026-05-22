@@ -522,4 +522,49 @@ public sealed class StreamAggregateTests
         result.IsSuccess.Should().BeTrue();
         stream.Binding!.LastSync.Should().Be(at);
     }
+
+    // --- Performance direction tests ---
+
+    private static Stream RegisteredStream(Direction direction)
+    {
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(direction: direction));
+        return stream;
+    }
+
+    [Fact]
+    public void IngestEvent_PerformanceStream_AcceptsNegativeAmount()
+    {
+        var stream = RegisteredStream(Direction.Performance);
+
+        var result = stream.IngestEvent(ValidIngestDto(-500m));
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Events.Should().HaveCount(1);
+        stream.Events[0].Amount.Amount.Should().Be(-500m);
+    }
+
+    [Fact]
+    public void IngestEvent_PerformanceStream_RejectsZeroAmount()
+    {
+        var stream = RegisteredStream(Direction.Performance);
+
+        var result = stream.IngestEvent(ValidIngestDto(0m));
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.FlowEvent.AmountZero);
+        result.Errors[0].Should().BeOfType<ValidationError>();
+    }
+
+    [Fact]
+    public void IngestEvent_IncomeStream_RejectsNegativeAmount()
+    {
+        var stream = RegisteredStream(Direction.Income);
+
+        var result = stream.IngestEvent(ValidIngestDto(-10m));
+
+        result.IsFailure.Should().BeTrue();
+        result.Errors.Should().ContainSingle(e => e.ErrorCode == DomainErrors.FlowEvent.AmountNotPositive);
+        result.Errors[0].Should().BeOfType<ValidationError>();
+    }
 }
