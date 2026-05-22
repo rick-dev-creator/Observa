@@ -11,6 +11,11 @@
             <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Income))">Income only</button>
             <span class="text-zinc-700">|</span>
             <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Outcome))">Outcome only</button>
+            @if (Streams.Any(s => s.Direction == Direction.Performance))
+            {
+                <span class="text-zinc-700">|</span>
+                <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Performance))">Performance only</button>
+            }
         </div>
     </div>
     <div class="flex flex-wrap gap-2">

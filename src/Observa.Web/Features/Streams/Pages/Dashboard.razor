@@ -221,7 +221,7 @@ else
                             <td class="px-4 py-2 text-right tabular-nums">
                                 @if (t.LastMonthAmount is { } lm && (lm > 0 || (lm != 0 && t.Direction == Direction.Performance)))
                                 {
-                                    <span class="@(t.Direction == Direction.Income ? "text-emerald-400" : "text-rose-400")">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
+                                    <span class="@ValueColor(t.Direction, lm)">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
                                 }
                                 else
                                 {
@@ -248,7 +248,7 @@ else
                             <td class="px-4 py-2">
                                 <div class="h-6 w-28">
                                     <Sparkline Data="t.Sparkline"
-                                               StrokeColor="@(t.Direction == Direction.Income ? "#10b981" : "#f43f5e")" />
+                                               StrokeColor="@SparkColor(t.Direction)" />
                                 </div>
                             </td>
                         </tr>
@@ -279,7 +279,7 @@ else
                                     <span class="text-zinc-500">Last month:</span>
                                     @if (t.LastMonthAmount is { } lm && (lm > 0 || (lm != 0 && t.Direction == Direction.Performance)))
                                     {
-                                        <span class="@(t.Direction == Direction.Income ? "text-emerald-400" : "text-rose-400") tabular-nums">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
+                                        <span class="@ValueColor(t.Direction, lm) tabular-nums">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
                                     }
                                     else
                                     {
@@ -386,6 +386,25 @@ else
         > 0 => "text-emerald-400",
         < 0 => "text-rose-400",
         _ => "text-zinc-200",
+    };
+
+    // A stream's per-value colour. Income is always green, Outcome always red; Performance
+    // is signed, so it colours by the value (gain green / loss red).
+    private static string ValueColor(Direction d, decimal v) => d switch
+    {
+        Direction.Income => "text-emerald-400",
+        Direction.Outcome => "text-rose-400",
+        Direction.Performance => v < 0 ? "text-rose-400" : "text-emerald-400",
+        _ => "text-zinc-300",
+    };
+
+    // Sparkline stroke per direction: Performance uses the volatile amber theme.
+    private static string SparkColor(Direction d) => d switch
+    {
+        Direction.Income => "#10b981",
+        Direction.Outcome => "#f43f5e",
+        Direction.Performance => "#f59e0b",
+        _ => "#a1a1aa",
     };
 
     private static string DeltaColor(decimal d) => d switch
