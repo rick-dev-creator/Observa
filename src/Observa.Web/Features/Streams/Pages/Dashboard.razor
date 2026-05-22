@@ -32,11 +32,20 @@ else
                 @onclick="@(() => _activeTab = 1)">
             What if…
         </button>
+        <button type="button" role="tab"
+                class="@TabClass(2)"
+                @onclick="@(() => _activeTab = 2)">
+            Assets
+        </button>
     </div>
 
     @if (_activeTab == 1)
     {
         <WhatIfTab Trends="_trends" />
+    }
+    else if (_activeTab == 2)
+    {
+        <AssetHoldingsTab Holdings="_holdings" />
     }
     else
     {
@@ -329,6 +338,7 @@ else
     private IReadOnlyList<StreamSummaryView> _allStreams = [];
     private IReadOnlyList<MonthlyStreamPointView> _historyByStream = [];
     private IReadOnlyList<YearlyStreamPointView> _yearlyByStream = [];
+    private IReadOnlyList<AssetHoldingView> _holdings = [];
     private IReadOnlyCollection<Guid>? _filter;
     private string _filterKey = "init";
 
@@ -355,6 +365,7 @@ else
         _yearly = await Analytics.GetYearlyHistoryAsync(CancellationToken.None, _filter);
         _historyByStream = await Analytics.GetMonthlyHistoryByStreamAsync(12, CancellationToken.None, _filter);
         _yearlyByStream = await Analytics.GetYearlyHistoryByStreamAsync(CancellationToken.None, _filter);
+        _holdings = await Analytics.GetAssetHoldingsAsync(CancellationToken.None);
     }
 
     private async Task OnFilterChangedAsync(IReadOnlyCollection<Guid> selection)
