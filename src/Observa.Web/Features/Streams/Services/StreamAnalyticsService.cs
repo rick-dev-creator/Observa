@@ -472,6 +472,11 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var avgNet = completeMonths.Length > 0 ? completeMonths.Average(m => m.Net) : 0m;
         var stddev = completeMonths.Length > 1 ? StdDev(completeMonths.Select(m => m.Net).ToArray()) : 0m;
 
+        // Net includes signed Performance, so stddev already reflects volatile streams.
+        // Report ~P5–P95 (1.65σ) so volatile assets read as uncertain (wider than a 1σ band).
+        const decimal BandSigma = 1.65m;
+        var uncertaintyBand = BandSigma * stddev;
+
         var monthsToYearEnd = Math.Max(0, 12 - DateTimeOffset.UtcNow.Month);
 
         var eom = current.OnTrackEom;
@@ -505,7 +510,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             EndOfMonth: Math.Round(eom ?? avgNet, 2),
             ThreeMonthsAhead: Math.Round(threeMonth, 2),
             YearEnd: monthsToYearEnd == 0 ? Math.Round(eom ?? avgNet, 2) : Math.Round(yearEnd, 2),
-            Uncertainty: Math.Round(stddev, 2),
+            Uncertainty: Math.Round(uncertaintyBand, 2),
             RunwayMonths: runway,
             RunwayMessage: runwayMessage);
     }

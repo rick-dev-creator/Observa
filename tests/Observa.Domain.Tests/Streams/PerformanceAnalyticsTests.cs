@@ -100,4 +100,79 @@ public sealed class PerformanceAnalyticsTests
         // Net = Income(1000) - Outcome(0) + Performance(-300) = 700
         bucket.Net.Should().Be(700m);
     }
+
+    [Fact]
+    public void ComputeProjection_Uncertainty_Is1Point65Sigma()
+    {
+        // Arrange: build a Performance stream with events in three complete past months,
+        // plus a steady Income stream. The volatile Performance events make Net vary so
+        // stddev > 0 and the 1.65σ band is meaningful.
+        var now = DateTimeOffset.UtcNow;
+
+        // Months -3, -2, -1 are all complete (current month is excluded from completeMonths).
+        var month3Start = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(-3);
+        var month2Start = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(-2);
+        var month1Start = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(-1);
+
+        // Steady income: 2000 each month in the three complete past months.
+        var incomeStream = new StreamGrainState
+        {
+            Id = Guid.NewGuid(),
+            Direction = Direction.Income,
+            Status = StreamStatus.Active,
+            Events = new List<FlowEventSnapshot>
+            {
+                new() { Id = Guid.NewGuid(), OccurredAt = month3Start.AddDays(5), Amount = new MoneyState { Amount = 2000m } },
+                new() { Id = Guid.NewGuid(), OccurredAt = month2Start.AddDays(5), Amount = new MoneyState { Amount = 2000m } },
+                new() { Id = Guid.NewGuid(), OccurredAt = month1Start.AddDays(5), Amount = new MoneyState { Amount = 2000m } },
+            },
+        };
+
+        // Volatile performance: +500, -300, +800 across the three months (signed, stored as-is).
+        var performanceStream = new StreamGrainState
+        {
+            Id = Guid.NewGuid(),
+            Direction = Direction.Performance,
+            Status = StreamStatus.Active,
+            Events = new List<FlowEventSnapshot>
+            {
+                new() { Id = Guid.NewGuid(), OccurredAt = month3Start.AddDays(10), Amount = new MoneyState { Amount = 500m } },
+                new() { Id = Guid.NewGuid(), OccurredAt = month2Start.AddDays(10), Amount = new MoneyState { Amount = -300m } },
+                new() { Id = Guid.NewGuid(), OccurredAt = month1Start.AddDays(10), Amount = new MoneyState { Amount = 800m } },
+            },
+        };
+
+        var states = new List<StreamGrainState> { incomeStream, performanceStream };
+
+        // Act
+        var result = StreamAnalyticsService.ComputeProjection(states);
+
+        // Derive the expected band from the same data ComputeProjection uses:
+        // completeMonths = ComputeMonthlyHistory(states, 12).SkipLast(1)
+        // (current partial month is excluded — SkipLast(1) matches the service logic)
+        var history = StreamAnalyticsService.ComputeMonthlyHistory(states, 12);
+        var completeMonths = history.SkipLast(1).ToArray();
+        var nets = completeMonths.Select(m => m.Net).ToArray();
+
+        // Replicate the private StdDev formula (sample variance, divides by n-1)
+        static decimal SampleStdDev(decimal[] values)
+        {
+            if (values.Length < 2) return 0m;
+            var mean = values.Average();
+            var variance = values.Select(v => (v - mean) * (v - mean)).Sum() / (values.Length - 1);
+            return (decimal)Math.Sqrt((double)variance);
+        }
+
+        var stddev = SampleStdDev(nets);
+        const decimal BandSigma = 1.65m;
+        var expectedUncertainty = Math.Round(BandSigma * stddev, 2);
+
+        // Assert: Uncertainty must equal 1.65σ (not 1σ)
+        result.Uncertainty.Should().Be(expectedUncertainty,
+            "the projection band should be ≈P5–P95 (1.65σ) so volatile assets read as uncertain");
+
+        // Guard: the band must actually be wider than 1σ (confirms 1.65 multiplier applies)
+        result.Uncertainty.Should().BeGreaterThan(Math.Round(stddev, 2),
+            "1.65σ must be strictly wider than 1σ when stddev > 0");
+    }
 }
