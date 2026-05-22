@@ -23,7 +23,7 @@ Observa is intentionally macro: it tracks the *streams* (salary, Patreon, subscr
 | Orchestration (prod) | Docker Compose |
 | Currency | USD only (no multi-currency in this version) |
 
-The chain pattern of Crucible is the dispatcher; there is no MediatR or equivalent. Each request flows `Blazor → Service → Crucible chain → Aggregate → Handler → Orleans grain → Response`. Connectors (Patreon today; Stripe, bank, CSV as next slices) live in their own feature and are called from the orchestrator, never from inside a grain.
+The chain pattern of Crucible is the dispatcher; there is no MediatR or equivalent. Each request flows `Blazor → Service → Crucible chain → Aggregate → Handler → Orleans grain → Response`. Connectors (Patreon and BloFin today; Stripe, bank, CSV as next slices) live in their own feature and are called from the orchestrator, never from inside a grain.
 
 ## Architecture
 
@@ -35,6 +35,7 @@ src/
 ├── Observa.ServiceDefaults/         Shared service config: OTel, health checks
 ├── Observa.Connectors.Abstractions/ IConnector + ConnectorFlowEvent contract
 ├── Observa.Connectors.Patreon/      Patreon API v2 connector with historical backfill
+├── Observa.Connectors.Blofin/       BloFin affiliate connector: daily commission as income events
 └── Observa.Web/                     Blazor Server + Orleans silo (co-hosted)
     ├── Program.cs
     ├── Dockerfile                   Multi-stage build (.NET SDK + Node for Tailwind)
@@ -52,6 +53,7 @@ Observa ships with a `compose.yml` for production-style deployment.
 
 - Docker 25+ with the Compose plugin
 - A Patreon Creator Access Token if you want to connect a Patreon campaign (optional)
+- BloFin affiliate API credentials (key + secret + passphrase) if you want to track affiliate rebates (optional)
 
 ### First-time setup
 
@@ -63,6 +65,7 @@ cp .env.example .env
 # Edit .env and set at minimum:
 #   POSTGRES_PASSWORD       any value, used to initialise the Postgres volume
 #   PATREON_ACCESS_TOKEN    your Patreon Creator Access Token (optional)
+#   BLOFIN_API_KEY / BLOFIN_SECRET_KEY / BLOFIN_PASSPHRASE  BloFin affiliate API (optional)
 
 docker compose up -d --build
 ```

@@ -6,7 +6,7 @@ Observa is intentionally small and macro. This file tracks what is shipped, what
 
 - Stream aggregate with full lifecycle (Register, Pause, Resume, Stop, Delete) and Crucible-enforced typestate.
 - Orleans grain persistence on Postgres with reminders.
-- Connectors: Manual (placeholder), Recurring (schedule-driven backfill via `StartFrom`), Patreon (real v2 API with historical reconstruction from `lifetime_support_cents`).
+- Connectors: Manual (placeholder), Recurring (schedule-driven backfill via `StartFrom`), Patreon (real v2 API with historical reconstruction from `lifetime_support_cents`), BloFin (real affiliate API — daily commission across all invitees aggregated into one income event per day, signed with API key/secret/passphrase).
 - Dashboard tabs: Overview (KPIs, retrospective, running balance, yearly trend, monthly per-stream, streams table) and What-if (preset scenarios + comparison cards + line chart + per-stream impact).
 - Stream multiselect filter on Overview, applied to every chart and KPI.
 - Stacked bar charts per stream (yearly + monthly) with overlaid Net line.
