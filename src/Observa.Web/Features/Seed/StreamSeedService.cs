@@ -52,7 +52,8 @@ public sealed class StreamSeedService(
             return;
         }
 
-        logger.LogInformation("Seeding 15 streams with monthly events from {Start:yyyy-MM} to now…", SeedStart);
+        logger.LogInformation("Seeding {Count} streams with monthly events from {Start:yyyy-MM} to now…",
+            StreamSeedCatalog.Build().Count, SeedStart);
         var rng = new Random(42);
         var seeded = 0;
         var eventsTotal = 0;
@@ -60,23 +61,35 @@ public sealed class StreamSeedService(
 
         foreach (var item in StreamSeedCatalog.Build())
         {
-            var schedule = Recurrence.Create(Cadence.Monthly, item.AnchorDay, item.Variability, SeedStart).Match(
-                r => r,
-                _ => throw new InvalidOperationException("seed: invalid Recurrence"));
+            // Performance streams are unbound (manually-fed): no Recurring connector emitting
+            // positive scheduled events, no fixed ExpectedAmount. The seed injects their signed
+            // historical P&L directly below.
+            Recurrence? schedule = null;
+            ConnectorBinding? binding = null;
+            decimal? expected = null;
 
-            var binding = ConnectorBinding.Create(
-                new ConnectorId("recurring"),
-                externalRef: item.Name.ToLowerInvariant().Replace(' ', '-'),
-                lastSync: now).Match(
-                b => b,
-                _ => throw new InvalidOperationException("seed: invalid ConnectorBinding"));
+            if (item.Direction != Direction.Performance)
+            {
+                schedule = Recurrence.Create(Cadence.Monthly, item.AnchorDay, item.Variability, SeedStart).Match(
+                    r => r,
+                    _ => throw new InvalidOperationException("seed: invalid Recurrence"));
+
+                binding = ConnectorBinding.Create(
+                    new ConnectorId("recurring"),
+                    externalRef: item.Name.ToLowerInvariant().Replace(' ', '-'),
+                    lastSync: now).Match(
+                    b => b,
+                    _ => throw new InvalidOperationException("seed: invalid ConnectorBinding"));
+
+                expected = item.ExpectedAmount;
+            }
 
             var register = await streams.RegisterAsync(new RegisterStreamDto(
                 Name: item.Name,
                 Category: item.Category,
                 Direction: item.Direction,
                 Schedule: schedule,
-                ExpectedAmount: item.ExpectedAmount,
+                ExpectedAmount: expected,
                 Binding: binding), ct);
 
             if (register.IsFailure)
@@ -108,16 +121,30 @@ public sealed class StreamSeedService(
 
         while (date <= now)
         {
-            var amount = item.Variability == Variability.Fixed
-                ? item.ExpectedAmount
-                : item.ExpectedAmount + item.ExpectedAmount * VariableSpread * ((decimal)rng.NextDouble() - 0.5m);
-            amount = Math.Round(Math.Max(amount, 0.01m), 2);
+            decimal amount;
+            string externalRef;
+            if (item.Direction == Direction.Performance)
+            {
+                // Signed monthly P&L: mean drift ± symmetric swing. NOT clamped — losses allowed.
+                var pnl = item.ExpectedAmount + item.Swing * (2m * (decimal)rng.NextDouble() - 1m);
+                amount = Math.Round(pnl, 2);
+                if (amount == 0m) amount = 0.01m; // Performance rejects exactly zero
+                externalRef = $"perf-{date:yyyyMMdd}";
+            }
+            else
+            {
+                var raw = item.Variability == Variability.Fixed
+                    ? item.ExpectedAmount
+                    : item.ExpectedAmount + item.ExpectedAmount * VariableSpread * ((decimal)rng.NextDouble() - 0.5m);
+                amount = Math.Round(Math.Max(raw, 0.01m), 2);
+                externalRef = $"scheduled-{date:yyyyMMdd}";
+            }
 
             var dto = new IngestEventDto(
                 OccurredAt: date,
                 Amount: amount,
-                Source: IngestionSource.Connector,
-                ExternalRef: $"scheduled-{date:yyyyMMdd}");
+                Source: item.Direction == Direction.Performance ? IngestionSource.Manual : IngestionSource.Connector,
+                ExternalRef: externalRef);
 
             var result = await streams.IngestEventAsync(streamId, dto, ct);
             if (result.IsSuccess) ingested++;
