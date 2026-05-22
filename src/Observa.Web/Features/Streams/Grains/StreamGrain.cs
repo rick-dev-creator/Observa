@@ -18,6 +18,10 @@ public sealed class StreamGrain(
     {
         newState.ActivityLog = state.State.ActivityLog;
         newState.LastConnectorPollAt = state.State.LastConnectorPollAt;
+        // SnapshotState is grain-owned (set by SetConnectorSnapshotStateAsync); preserve it if the
+        // incoming state didn't carry it but the existing binding had one.
+        if (newState.Binding is not null && newState.Binding.SnapshotState is null && state.State.Binding?.SnapshotState is not null)
+            newState.Binding.SnapshotState = state.State.Binding.SnapshotState;
         state.State = newState;
 
         if (logEntry is not null)

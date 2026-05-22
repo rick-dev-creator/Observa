@@ -167,23 +167,39 @@ public sealed class ConnectorPollOrchestrator(
             return;
         }
 
-        await grain.SetConnectorSnapshotStateAsync(sample.State);
-
         var ingested = 0;
         await using var scope = scopeFactory.CreateAsyncScope();
         var service = scope.ServiceProvider.GetRequiredService<StreamService>();
 
-        if (sample.HasPrevious && sample.PerformanceDeltaUsd != 0m)
+        if (!sample.HasPrevious)
+        {
+            // First poll: just establish the baseline.
+            await grain.SetConnectorSnapshotStateAsync(sample.State);
+        }
+        else if (sample.PerformanceDeltaUsd == 0m)
+        {
+            // Flat: no event, but advance the baseline.
+            await grain.SetConnectorSnapshotStateAsync(sample.State);
+        }
+        else
         {
             var result = await service.IngestEventAsync(
                 StreamId.From(streamId),
                 new IngestEventDto(now, sample.PerformanceDeltaUsd, IngestionSource.Connector,
                     $"snapshot-{now:yyyyMMddHHmmssfff}"),
                 ct);
-            if (result.IsSuccess) ingested = 1;
+            if (result.IsSuccess)
+            {
+                ingested = 1;
+                // Advance the baseline ONLY after the delta is safely recorded; otherwise the
+                // unrecorded change would be lost from the next delta computation.
+                await grain.SetConnectorSnapshotStateAsync(sample.State);
+            }
             else
-                logger.LogWarning("Stream {StreamId} snapshot ingest failed: {Errors}",
+            {
+                logger.LogWarning("Stream {StreamId} snapshot ingest failed; NOT advancing snapshot state: {Errors}",
                     streamId, string.Join(",", result.Errors.Select(e => e.ErrorCode)));
+            }
         }
 
         var pollResult = await service.RecordPollAsync(StreamId.From(streamId), now, ct);
