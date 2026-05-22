@@ -219,9 +219,9 @@ else
                             </td>
                             <td class="px-4 py-2 text-right text-zinc-300 tabular-nums">@(t.ExpectedAmount is null ? "—" : FormatMoney(t.ExpectedAmount.Value))</td>
                             <td class="px-4 py-2 text-right tabular-nums">
-                                @if (t.LastMonthAmount is { } lm && lm > 0)
+                                @if (t.LastMonthAmount is { } lm && (lm > 0 || (lm != 0 && t.Direction == Direction.Performance)))
                                 {
-                                    <span class="@(t.Direction == Direction.Income ? "text-emerald-400" : "text-rose-400")">@FormatMoney(lm)</span>
+                                    <span class="@(t.Direction == Direction.Income ? "text-emerald-400" : "text-rose-400")">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
                                 }
                                 else
                                 {
@@ -229,9 +229,9 @@ else
                                 }
                             </td>
                             <td class="px-4 py-2 text-right tabular-nums">
-                                @if (t.RecentAverage is { } avg && avg > 0)
+                                @if (t.RecentAverage is { } avg && (avg > 0 || (avg != 0 && t.Direction == Direction.Performance)))
                                 {
-                                    <span class="text-zinc-300">@FormatMoney(avg)</span>
+                                    <span class="text-zinc-300">@FormatMoney(avg, signed: t.Direction == Direction.Performance)</span>
                                 }
                                 else
                                 {
@@ -277,9 +277,9 @@ else
                                 </div>
                                 <div class="flex gap-2">
                                     <span class="text-zinc-500">Last month:</span>
-                                    @if (t.LastMonthAmount is { } lm && lm > 0)
+                                    @if (t.LastMonthAmount is { } lm && (lm > 0 || (lm != 0 && t.Direction == Direction.Performance)))
                                     {
-                                        <span class="@(t.Direction == Direction.Income ? "text-emerald-400" : "text-rose-400") tabular-nums">@FormatMoney(lm)</span>
+                                        <span class="@(t.Direction == Direction.Income ? "text-emerald-400" : "text-rose-400") tabular-nums">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
                                     }
                                     else
                                     {
@@ -288,9 +288,9 @@ else
                                 </div>
                                 <div class="flex gap-2">
                                     <span class="text-zinc-500">Avg:</span>
-                                    @if (t.RecentAverage is { } avg && avg > 0)
+                                    @if (t.RecentAverage is { } avg && (avg > 0 || (avg != 0 && t.Direction == Direction.Performance)))
                                     {
-                                        <span class="text-zinc-300 tabular-nums">@FormatMoney(avg)</span>
+                                        <span class="text-zinc-300 tabular-nums">@FormatMoney(avg, signed: t.Direction == Direction.Performance)</span>
                                     }
                                     else
                                     {

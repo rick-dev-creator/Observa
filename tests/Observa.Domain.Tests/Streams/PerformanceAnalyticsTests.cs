@@ -102,6 +102,82 @@ public sealed class PerformanceAnalyticsTests
     }
 
     [Fact]
+    public void ComputeStreamTrends_Performance_RecentAverage_IncludesNegativeMonths()
+    {
+        // Arrange: a Performance stream with three months: -500, -300, +800.
+        // RecentAverage should include all three non-zero months: (-500 + -300 + 800) / 3 = 0.
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var m1 = anchor.AddMonths(-3).AddDays(5);
+        var m2 = anchor.AddMonths(-2).AddDays(5);
+        var m3 = anchor.AddMonths(-1).AddDays(5);
+
+        var performanceStream = new StreamGrainState
+        {
+            Id = Guid.NewGuid(),
+            Direction = Direction.Performance,
+            Status = StreamStatus.Active,
+            Events = new List<FlowEventSnapshot>
+            {
+                new() { Id = Guid.NewGuid(), OccurredAt = m1, Amount = new MoneyState { Amount = -500m } },
+                new() { Id = Guid.NewGuid(), OccurredAt = m2, Amount = new MoneyState { Amount = -300m } },
+                new() { Id = Guid.NewGuid(), OccurredAt = m3, Amount = new MoneyState { Amount = 800m } },
+            },
+        };
+
+        var states = new List<StreamGrainState> { performanceStream };
+
+        // Act: use 4 sparkline months so months -3..-1 are visible (month -4 bucket will be 0).
+        var trends = StreamAnalyticsService.ComputeStreamTrends(states, 4);
+
+        var trend = trends.Should().ContainSingle().Subject;
+        // All three non-zero months are included: (-500 + -300 + 800) / 3 = 0
+        trend.RecentAverage.Should().Be(0m,
+            "Performance RecentAverage must include negative months, not filter them out");
+    }
+
+    [Fact]
+    public void ApplyScenario_Performance_PreservesLossSign()
+    {
+        // Arrange: a Performance stream with a loss event (-400).
+        // ApplyScenario with factor 2.0 should yield -800, NOT clamped to 0.
+        var now = DateTimeOffset.UtcNow;
+        var eventTs = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero).AddDays(5);
+
+        var streamId = Guid.NewGuid();
+        var performanceStream = new StreamGrainState
+        {
+            Id = streamId,
+            Direction = Direction.Performance,
+            Status = StreamStatus.Active,
+            Events = new List<FlowEventSnapshot>
+            {
+                new() { Id = Guid.NewGuid(), OccurredAt = eventTs, Amount = new MoneyState { Amount = -400m } },
+            },
+        };
+
+        var scenario = new Scenario(
+            Id: "test-double",
+            Label: "Double",
+            Narrative: "Test scenario",
+            ExcludedStreamIds: new HashSet<Guid>(),
+            StreamMultipliers: new Dictionary<Guid, decimal> { [streamId] = 2m },
+            CategoryMultipliers: new Dictionary<string, decimal>(),
+            DirectionMultipliers: new Dictionary<Direction, decimal>());
+
+        var states = new List<StreamGrainState> { performanceStream };
+
+        // Act
+        var result = StreamAnalyticsService.ApplyScenario(states, scenario);
+
+        result.Should().HaveCount(1);
+        var scaledEvent = result[0].Events.Should().ContainSingle().Subject;
+        scaledEvent.Amount.Amount.Should().Be(-800m,
+            "ApplyScenario must preserve the sign of Performance losses (not clamp to 0)");
+    }
+
+    [Fact]
     public void ComputeProjection_Uncertainty_Is1Point65Sigma()
     {
         // Arrange: build a Performance stream with events in three complete past months,

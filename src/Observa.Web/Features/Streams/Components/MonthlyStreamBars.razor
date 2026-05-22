@@ -13,7 +13,7 @@
                              Name="@name"
                              SeriesType="SeriesType.Bar"
                              XValue="@(p => p.Label)"
-                             YValue="@(p => direction == Direction.Income ? p.Amount : -p.Amount)" />
+                             YValue="@(p => direction == Direction.Performance ? p.Amount : (direction == Direction.Income ? p.Amount : -p.Amount))" />
         }
     </ApexChart>
 </div>

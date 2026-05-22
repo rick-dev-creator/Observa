@@ -426,7 +426,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             .ToList();
     }
 
-    private static IReadOnlyList<StreamTrendView> ComputeStreamTrends(IReadOnlyList<StreamGrainState> states, int sparklineMonths)
+    internal static IReadOnlyList<StreamTrendView> ComputeStreamTrends(IReadOnlyList<StreamGrainState> states, int sparklineMonths)
     {
         var now = DateTimeOffset.UtcNow;
         var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
@@ -446,10 +446,13 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
 
             decimal? lastMonth = buckets.Length >= 2 ? buckets[^2] : null;
 
-            var nonZero = buckets.Where(b => b > 0).ToArray();
+            var nonZero = s.Direction == Direction.Performance
+                ? buckets.Where(b => b != 0).ToArray()
+                : buckets.Where(b => b > 0).ToArray();
             decimal? avg = nonZero.Length > 0 ? nonZero.Average() : null;
 
-            var (slope, label, detail) = ClassifyTrend(buckets);
+            var includeNegatives = s.Direction == Direction.Performance;
+            var (slope, label, detail) = ClassifyTrend(buckets, includeNegatives);
 
             trends.Add(new StreamTrendView(
                 Id: s.Id,
@@ -496,7 +499,6 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var yearEnd = (current.NetMTD == 0 ? avgNet : current.OnTrackEom ?? avgNet) + avgNet * monthsToYearEnd;
 
         var avgOutcome = completeMonths.Length > 0 ? completeMonths.Average(m => m.Outcome) : 0m;
-        var avgIncome = completeMonths.Length > 0 ? completeMonths.Average(m => m.Income) : 0m;
 
         int? runway = null;
         string runwayMessage;
@@ -504,15 +506,17 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         {
             runwayMessage = "No outflows on record yet.";
         }
-        else if (avgIncome >= avgOutcome)
+        else if (avgNet >= 0)
         {
-            runwayMessage = avgIncome > avgOutcome
+            // avgNet already folds in Performance (signed), so a positive net means no burn.
+            runwayMessage = avgNet > 0
                 ? "You earn more than you spend — no runway concern."
                 : "You break even — no runway concern.";
         }
         else
         {
-            var burn = avgOutcome - avgIncome;
+            // avgNet < 0: net burn per month.
+            var burn = -avgNet;
             var assumedSavings = avgNet * Math.Max(completeMonths.Length, 1);
             runway = (int)Math.Max(0, Math.Floor(assumedSavings / burn));
             runwayMessage = $"Spending exceeds income by ~${burn:N0}/month.";
@@ -591,7 +595,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             WorstMonth: worst);
     }
 
-    private static IReadOnlyList<StreamGrainState> ApplyScenario(
+    internal static IReadOnlyList<StreamGrainState> ApplyScenario(
         IReadOnlyList<StreamGrainState> states,
         Scenario scenario)
     {
@@ -621,7 +625,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
                 {
                     Id = e.Id,
                     OccurredAt = e.OccurredAt,
-                    Amount = new MoneyState { Amount = Math.Max(0m, e.Amount.Amount * factor) },
+                    Amount = new MoneyState { Amount = s.Direction == Direction.Performance ? e.Amount.Amount * factor : Math.Max(0m, e.Amount.Amount * factor) },
                     Source = e.Source,
                     ExternalRef = e.ExternalRef,
                 }).ToList(),
@@ -645,9 +649,11 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         return states;
     }
 
-    private static (decimal? Slope, string Label, string Detail) ClassifyTrend(decimal[] series)
+    private static (decimal? Slope, string Label, string Detail) ClassifyTrend(decimal[] series, bool includeNegatives = false)
     {
-        var nonZero = series.Where(s => s > 0).ToArray();
+        var nonZero = includeNegatives
+            ? series.Where(s => s != 0).ToArray()
+            : series.Where(s => s > 0).ToArray();
         if (nonZero.Length < 3) return (null, "Insufficient data", "");
 
         var n = nonZero.Length;
@@ -659,10 +665,14 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         var slope = den == 0 ? 0m : num / den;
 
         var stddev = StdDev(nonZero);
-        var cv = meanY > 0 ? stddev / meanY : 0m;
+        // For Performance with mixed signs, meanY may be near zero or negative — use Math.Abs for CV denominator.
+        var absMeanY = Math.Abs(meanY);
+        var cv = absMeanY > 0 ? stddev / absMeanY : 0m;
         if (cv > VolatilityThreshold) return (slope, "Volatile", "varies a lot");
 
-        var threshold = meanY * SteadyThresholdPctOfAvg;
+        // Steady/trending comparisons: use absMeanY to avoid nonsense when meanY <= 0.
+        if (absMeanY <= 0) return (slope, "Steady", "consistent month over month");
+        var threshold = absMeanY * SteadyThresholdPctOfAvg;
         if (Math.Abs(slope) < threshold) return (slope, "Steady", "consistent month over month");
 
         var sign = slope > 0 ? "Trending up" : "Trending down";
