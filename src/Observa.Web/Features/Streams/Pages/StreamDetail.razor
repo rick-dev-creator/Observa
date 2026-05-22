@@ -67,7 +67,8 @@ else
             <details class="border border-zinc-800 rounded">
                 <summary class="px-4 py-2 text-sm text-zinc-300 cursor-pointer hover:bg-zinc-900/50">+ Ingest manual event</summary>
                 <div class="px-4 py-3 border-t border-zinc-800 grid grid-cols-[1fr_auto] gap-2">
-                    <input type="number" step="0.01" min="0.01" placeholder="Amount (USD)"
+                    <input type="number" step="0.01" min="@(_view.Direction == Direction.Performance ? null : "0.01")"
+                           placeholder="@(_view.Direction == Direction.Performance ? "Amount (+ gain / − loss)" : "Amount (USD)")"
                            class="bg-zinc-900 border border-zinc-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-zinc-500"
                            @bind="_ingestAmount" />
                     <button class="@PrimaryBtn" @onclick="IngestAsync" disabled="@_ingesting">
@@ -129,9 +130,12 @@ else
     private async Task IngestAsync()
     {
         _ingestError = null;
-        if (_ingestAmount is null or <= 0)
+        if (_ingestAmount is null
+            || (_view!.Direction == Direction.Performance ? _ingestAmount == 0 : _ingestAmount <= 0))
         {
-            _ingestError = "Amount must be positive.";
+            _ingestError = _view!.Direction == Direction.Performance
+                ? "Amount must be non-zero (+ gain / − loss)."
+                : "Amount must be positive.";
             return;
         }
 
