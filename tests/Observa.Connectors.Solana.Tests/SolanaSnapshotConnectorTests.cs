@@ -25,38 +25,34 @@ public sealed class SolanaSnapshotConnectorTests
     private static string Price(decimal p) => "{\"" + Mint + "\":{\"usdPrice\":" + p.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}}";
 
     [Fact]
-    public async Task FirstPoll_EstablishesBaseline_NoDelta()
+    public async Task FirstPoll_EmitsFullValue_AsBaseline()
     {
-        var c = Build(Lamports(2_000_000_000), Price(100m)); // q=2, p=100
-        var sample = await c.SampleAsync(new SnapshotContext(Guid.NewGuid(), Mint, PreviousState: null), CancellationToken.None);
-
-        sample.HasPrevious.Should().BeFalse();
-        sample.PerformanceDeltaUsd.Should().Be(0m);
-        SnapshotStateCodec.TryParse(sample.State).Should().Be((2m, 100m));
+        var c = Build(Lamports(2_000_000_000), Price(100m)); // q=2, p=100 → value 200
+        var s = await c.SampleAsync(new SnapshotContext(Guid.NewGuid(), Mint, null), CancellationToken.None);
+        s.PerformanceDeltaUsd.Should().Be(200m);
+        s.CapitalBasisUsd.Should().Be(200m);
+        s.HasPrevious.Should().BeFalse();
+        SnapshotStateCodec.TryParse(s.State).Should().Be((2m, 100m, 200m));
     }
 
     [Fact]
-    public async Task SubsequentPoll_DeltaIsPrevQuantityTimesPriceChange()
+    public async Task PriceRises_SameQty_ValueDeltaIsPriceMove_CapitalUnchanged()
     {
-        // prev q=2 @ p=100; now q=5 (bought more) @ p=120 → delta = 2*(120-100)=40 (NOT counting the +3 bought)
-        var prev = SnapshotStateCodec.Serialize(2m, 100m);
-        var c = Build(Lamports(5_000_000_000), Price(120m));
-        var sample = await c.SampleAsync(new SnapshotContext(Guid.NewGuid(), Mint, prev), CancellationToken.None);
-
-        sample.HasPrevious.Should().BeTrue();
-        sample.PerformanceDeltaUsd.Should().Be(40m);
-        SnapshotStateCodec.TryParse(sample.State).Should().Be((5m, 120m));
+        var prev = SnapshotStateCodec.Serialize(2m, 100m, 200m);
+        var c = Build(Lamports(2_000_000_000), Price(120m)); // value 240
+        var s = await c.SampleAsync(new SnapshotContext(Guid.NewGuid(), Mint, prev), CancellationToken.None);
+        s.PerformanceDeltaUsd.Should().Be(40m);
+        s.CapitalBasisUsd.Should().Be(200m);
+        s.HasPrevious.Should().BeTrue();
     }
 
     [Fact]
-    public async Task PriceFailure_PreservesPreviousState_NoEmit()
+    public async Task BuyMore_PriceFlat_ValueDeltaIsPurchase_CapitalIncreases()
     {
-        var prev = SnapshotStateCodec.Serialize(2m, 100m);
-        var c = Build(Lamports(5_000_000_000), "{\"data\":{}}"); // no price → no-op preserving prev
-        var sample = await c.SampleAsync(new SnapshotContext(Guid.NewGuid(), Mint, prev), CancellationToken.None);
-
-        sample.HasPrevious.Should().BeFalse();
-        sample.PerformanceDeltaUsd.Should().Be(0m);
-        sample.State.Should().Be(prev);
+        var prev = SnapshotStateCodec.Serialize(2m, 100m, 200m);
+        var c = Build(Lamports(5_000_000_000), Price(100m)); // q=5 (+3), value 500
+        var s = await c.SampleAsync(new SnapshotContext(Guid.NewGuid(), Mint, prev), CancellationToken.None);
+        s.PerformanceDeltaUsd.Should().Be(300m);   // 500 − 200
+        s.CapitalBasisUsd.Should().Be(500m);        // 200 + 3·100
     }
 }

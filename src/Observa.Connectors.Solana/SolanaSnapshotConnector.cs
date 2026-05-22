@@ -42,6 +42,7 @@ public sealed class SolanaSnapshotConnector : ISnapshotConnector
     public async Task<SnapshotSample> SampleAsync(SnapshotContext context, CancellationToken ct)
     {
         var mint = context.ExternalRef;
+        var prev = SnapshotStateCodec.TryParse(context.PreviousState);
         decimal quantity, price;
         try
         {
@@ -50,23 +51,28 @@ public sealed class SolanaSnapshotConnector : ISnapshotConnector
             if (p is null)
             {
                 _logger.LogWarning("Solana: no price for mint {Mint}; preserving previous state.", mint);
-                return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false, CapitalBasisUsd: 0m);
+                return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false, prev?.Capital ?? 0m);
             }
             price = p.Value;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Solana sample failed for mint {Mint}; preserving previous state.", mint);
-            return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false, CapitalBasisUsd: 0m);
+            return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false, prev?.Capital ?? 0m);
         }
 
-        var newState = SnapshotStateCodec.Serialize(quantity, price);
-        var prev = SnapshotStateCodec.TryParse(context.PreviousState);
+        var value = quantity * price;
         if (prev is null)
-            return new SnapshotSample(newState, 0m, HasPrevious: false, CapitalBasisUsd: 0m);
+        {
+            var capital0 = Math.Round(value, 2);
+            return new SnapshotSample(SnapshotStateCodec.Serialize(quantity, price, capital0),
+                Math.Round(value, 2), HasPrevious: false, capital0);
+        }
 
-        // Performance = price movement on the quantity we already held. Quantity changes are capital, excluded.
-        var delta = Math.Round(prev.Value.Quantity * (price - prev.Value.Price), 2);
-        return new SnapshotSample(newState, delta, HasPrevious: true, CapitalBasisUsd: 0m);
+        var prevValue = prev.Value.Quantity * prev.Value.Price;
+        var valueDelta = Math.Round(value - prevValue, 2);
+        var capital = Math.Round(prev.Value.Capital + (quantity - prev.Value.Quantity) * price, 2);
+        return new SnapshotSample(SnapshotStateCodec.Serialize(quantity, price, capital),
+            valueDelta, HasPrevious: true, capital);
     }
 }

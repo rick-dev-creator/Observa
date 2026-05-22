@@ -6,13 +6,12 @@ namespace Observa.Connectors.Solana.Tests;
 public sealed class SnapshotStateCodecTests
 {
     [Fact]
-    public void RoundTrips_QuantityAndPrice()
+    public void RoundTrips_QuantityPriceAndCapital()
     {
-        var json = SnapshotStateCodec.Serialize(12.5m, 140.25m);
+        var json = SnapshotStateCodec.Serialize(12.5m, 140.25m, 1000m);
         var parsed = SnapshotStateCodec.TryParse(json);
         parsed.Should().NotBeNull();
-        parsed!.Value.Quantity.Should().Be(12.5m);
-        parsed.Value.Price.Should().Be(140.25m);
+        parsed!.Value.Should().Be((12.5m, 140.25m, 1000m));
     }
 
     [Fact]
