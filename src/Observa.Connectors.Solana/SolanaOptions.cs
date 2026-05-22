@@ -11,5 +11,11 @@ public sealed class SolanaOptions
     public string JupiterBaseUrl { get; set; } = "https://lite-api.jup.ag";
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromHours(24);
 
+    /// <summary>Minimum USD value for a token to be auto-discovered as a stream (dust filter).</summary>
+    public decimal MinValueUsd { get; set; } = 10m;
+
+    /// <summary>How often the wallet is re-scanned for new tokens to provision.</summary>
+    public TimeSpan SyncInterval { get; set; } = TimeSpan.FromHours(24);
+
     public const string NativeSolMint = "So11111111111111111111111111111111111111112";
 }
