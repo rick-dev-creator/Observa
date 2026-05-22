@@ -23,6 +23,14 @@ public sealed partial record Money : ValueObject
         return Result.Success();
     }
 
+    /// <summary>
+    /// Creates a Money that may be negative or zero. Used for Performance flow events
+    /// (gains/losses). The non-negative invariant of <see cref="Create"/> is intentionally
+    /// NOT applied here — sign validity is enforced by the Stream aggregate per direction.
+    /// </summary>
+    public static Result<Money> CreateSigned(decimal amount) =>
+        Result<Money>.Success(new Money { Amount = amount });
+
     public static Money Zero => Create(0m).Match(
         money => money,
         errors => throw new ValueObjectException(

@@ -49,4 +49,25 @@ public sealed class MoneyTests
 
         a.Should().Be(b);
     }
+
+    [Fact]
+    public void CreateSigned_WithNegativeAmount_Succeeds()
+    {
+        var result = Money.CreateSigned(-250.50m);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Amount.Should().Be(-250.50m);
+    }
+
+    [Fact]
+    public void CreateSigned_WithPositiveAmount_Succeeds()
+    {
+        Money.CreateSigned(99m).Value.Amount.Should().Be(99m);
+    }
+
+    [Fact]
+    public void CreateSigned_WithZero_Succeeds()
+    {
+        Money.CreateSigned(0m).Value.Amount.Should().Be(0m);
+    }
 }
