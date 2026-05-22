@@ -15,7 +15,10 @@ public sealed class SolanaSnapshotConnector : ISnapshotConnector
     {
         if (string.IsNullOrWhiteSpace(options.Id))
             throw new InvalidOperationException("SolanaOptions.Id is required.");
-        _options = options; _rpc = rpc; _jupiter = jupiter; _logger = logger;
+        _options = options;
+        _rpc = rpc;
+        _jupiter = jupiter;
+        _logger = logger;
 
         Id = new ConnectorId(options.Id);
         Metadata = new ConnectorMetadata(

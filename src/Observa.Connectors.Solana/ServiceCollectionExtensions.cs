@@ -11,6 +11,8 @@ public static class ServiceCollectionExtensions
     {
         var accounts = configuration.GetSection(SolanaOptions.SectionName).Get<SolanaOptions[]>() ?? [];
 
+        // All accounts share one RPC/Jupiter HttpClient using the first account's URLs.
+        // Multi-account with different RPC endpoints is not supported (same limitation as Blofin).
         services.AddHttpClient<SolanaRpcClient>(http =>
         {
             http.BaseAddress = new Uri(accounts.FirstOrDefault()?.RpcUrl ?? "https://api.mainnet-beta.solana.com");
