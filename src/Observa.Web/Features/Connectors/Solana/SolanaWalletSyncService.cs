@@ -17,7 +17,6 @@ public sealed class SolanaWalletSyncService(
     IConfiguration configuration,
     IServiceProvider sp,
     IGrainFactory grains,
-    SolanaWalletScanner scanner,
     ILogger<SolanaWalletSyncService> logger)
     : BackgroundService
 {
@@ -27,13 +26,16 @@ public sealed class SolanaWalletSyncService(
         var active = accounts.Where(a => !string.IsNullOrWhiteSpace(a.WalletAddress)).ToArray();
         if (active.Length == 0) return;
 
+        var scanner = sp.GetService<SolanaWalletScanner>();
+        if (scanner is null) return;
+
         await Task.Delay(TimeSpan.FromSeconds(10), ct); // let the silo settle
 
         while (!ct.IsCancellationRequested)
         {
             foreach (var account in active)
             {
-                try { await SyncWalletAsync(account, ct); }
+                try { await SyncWalletAsync(scanner, account, ct); }
                 catch (OperationCanceledException) { return; }
                 catch (Exception ex) { logger.LogError(ex, "Solana wallet sync failed for {Id}.", account.Id); }
             }
@@ -42,7 +44,7 @@ public sealed class SolanaWalletSyncService(
         }
     }
 
-    private async Task SyncWalletAsync(SolanaOptions account, CancellationToken ct)
+    private async Task SyncWalletAsync(SolanaWalletScanner scanner, SolanaOptions account, CancellationToken ct)
     {
         var discovered = await scanner.ScanAsync(account.WalletAddress, account.MinValueUsd, ct);
         if (discovered.Count == 0) return;
@@ -57,7 +59,11 @@ public sealed class SolanaWalletSyncService(
         foreach (var token in toCreate)
         {
             var binding = ConnectorBinding.Create(new ConnectorId(account.Id), token.Mint, null, null);
-            if (binding.IsFailure) continue;
+            if (binding.IsFailure)
+            {
+                logger.LogWarning("Solana: could not build binding for {Mint}; skipping.", token.Mint);
+                continue;
+            }
             var dto = new RegisterStreamDto(token.Symbol, "Crypto", Direction.Performance, null, null, binding.Value);
             var result = await streams.RegisterAsync(dto, ct);
             if (result.IsSuccess) created++;
@@ -74,6 +80,7 @@ public sealed class SolanaWalletSyncService(
         var index = grains.GetGrain<IStreamIndexGrain>(StreamIndexGrain.SingletonKey);
         foreach (var id in await index.GetAllAsync())
         {
+            ct.ThrowIfCancellationRequested();
             var state = await grains.GetGrain<IStreamGrain>(id).GetAsync();
             if (state.Status is StreamStatus.Stopped or StreamStatus.Deleted) continue;
             if (state.Binding is { } b && string.Equals(b.ConnectorId, connectorId, StringComparison.OrdinalIgnoreCase))
