@@ -294,11 +294,12 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         {
             runningStable += kv.Value.Income - kv.Value.Outcome;
             runningVolatile += kv.Value.Performance;
-            var total = runningStable + runningVolatile;
             var ts = new DateTimeOffset(kv.Key.Y, kv.Key.M, 1, 0, 0, 0, TimeSpan.Zero);
+            var stable = Math.Round(runningStable, 2);
+            var volatile_ = Math.Round(runningVolatile, 2);
             points.Add(new CumulativeBalancePointView(
-                ts.ToString("MMM yy"), ts, Math.Round(total, 2), IsProjected: false,
-                Math.Round(runningStable, 2), Math.Round(runningVolatile, 2)));
+                ts.ToString("MMM yy"), ts, stable + volatile_, IsProjected: false,
+                stable, volatile_));
         }
 
         for (var i = 1; i <= futureMonths; i++)
@@ -306,9 +307,11 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             runningStable += avgStableNet;
             runningVolatile += avgPerformance;
             var d = currentMonth.AddMonths(i);
+            var stable = Math.Round(runningStable, 2);
+            var volatile_ = Math.Round(runningVolatile, 2);
             points.Add(new CumulativeBalancePointView(
-                d.ToString("MMM yy"), d, Math.Round(runningStable + runningVolatile, 2), IsProjected: true,
-                Math.Round(runningStable, 2), Math.Round(runningVolatile, 2)));
+                d.ToString("MMM yy"), d, stable + volatile_, IsProjected: true,
+                stable, volatile_));
         }
 
         return points;

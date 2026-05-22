@@ -13,17 +13,22 @@
                          XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
                          YValue="@(p => p.StableBalance)" />
 
-        <ApexPointSeries TItem="CumulativeBalancePointView"
-                         Items="Data"
-                         Name="Performance"
-                         SeriesType="SeriesType.Area"
-                         XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
-                         YValue="@(p => p.VolatileBalance)" />
+        @if (HasPerformance)
+        {
+            <ApexPointSeries TItem="CumulativeBalancePointView"
+                             Items="Data"
+                             Name="Performance"
+                             SeriesType="SeriesType.Area"
+                             XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                             YValue="@(p => p.VolatileBalance)" />
+        }
     </ApexChart>
 </div>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<CumulativeBalancePointView> Data { get; set; } = [];
+
+    private bool HasPerformance => Data?.Any(p => p.VolatileBalance != 0m) == true;
 
     private ApexChartOptions<CumulativeBalancePointView> _options = null!;
 
