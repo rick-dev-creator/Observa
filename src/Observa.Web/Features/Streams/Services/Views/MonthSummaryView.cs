@@ -10,4 +10,5 @@ public sealed record MonthSummaryView(
     decimal? PreviousMonthSamePoint,      // net at same day-into-month last month
     decimal? Delta,                        // NetMTD - PreviousMonthSamePoint
     int DaysIntoMonth,
-    int DaysInMonth);
+    int DaysInMonth,
+    decimal PerformanceMTD = 0m);
