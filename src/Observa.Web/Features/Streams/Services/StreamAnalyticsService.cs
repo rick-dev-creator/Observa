@@ -279,27 +279,36 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             }
         }
 
-        var monthlyNets = buckets.Select(kv => (Key: kv.Key, Net: kv.Value.Income - kv.Value.Outcome + kv.Value.Performance)).ToList();
+        var bucketList = buckets.ToList();
 
-        var completePast = monthlyNets.Count > 1
-            ? monthlyNets.Take(monthlyNets.Count - 1).Select(m => m.Net).ToArray()
-            : Array.Empty<decimal>();
-        var avgNet = completePast.Length > 0 ? completePast.Average() : 0m;
+        var completePast = bucketList.Count > 1
+            ? bucketList.Take(bucketList.Count - 1).ToArray()
+            : Array.Empty<KeyValuePair<(int Y, int M), (decimal Income, decimal Outcome, decimal Performance)>>();
+        var avgStableNet = completePast.Length > 0 ? completePast.Average(m => m.Value.Income - m.Value.Outcome) : 0m;
+        var avgPerformance = completePast.Length > 0 ? completePast.Average(m => m.Value.Performance) : 0m;
+        var avgNet = avgStableNet + avgPerformance;
 
-        var points = new List<CumulativeBalancePointView>(monthlyNets.Count + futureMonths);
-        decimal running = 0m;
-        foreach (var (key, net) in monthlyNets)
+        var points = new List<CumulativeBalancePointView>(bucketList.Count + futureMonths);
+        decimal runningStable = 0m, runningVolatile = 0m;
+        foreach (var kv in bucketList)
         {
-            running += net;
-            var ts = new DateTimeOffset(key.Y, key.M, 1, 0, 0, 0, TimeSpan.Zero);
-            points.Add(new CumulativeBalancePointView(ts.ToString("MMM yy"), ts, Math.Round(running, 2), IsProjected: false));
+            runningStable += kv.Value.Income - kv.Value.Outcome;
+            runningVolatile += kv.Value.Performance;
+            var total = runningStable + runningVolatile;
+            var ts = new DateTimeOffset(kv.Key.Y, kv.Key.M, 1, 0, 0, 0, TimeSpan.Zero);
+            points.Add(new CumulativeBalancePointView(
+                ts.ToString("MMM yy"), ts, Math.Round(total, 2), IsProjected: false,
+                Math.Round(runningStable, 2), Math.Round(runningVolatile, 2)));
         }
 
         for (var i = 1; i <= futureMonths; i++)
         {
-            running += avgNet;
+            runningStable += avgStableNet;
+            runningVolatile += avgPerformance;
             var d = currentMonth.AddMonths(i);
-            points.Add(new CumulativeBalancePointView(d.ToString("MMM yy"), d, Math.Round(running, 2), IsProjected: true));
+            points.Add(new CumulativeBalancePointView(
+                d.ToString("MMM yy"), d, Math.Round(runningStable + runningVolatile, 2), IsProjected: true,
+                Math.Round(runningStable, 2), Math.Round(runningVolatile, 2)));
         }
 
         return points;
