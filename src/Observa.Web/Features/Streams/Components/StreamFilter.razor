@@ -1,49 +1,65 @@
-<div class="border border-zinc-800 rounded p-3 sm:p-4 mb-6">
-    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <p class="text-xs uppercase tracking-wide text-zinc-500">
-            Streams in view <span class="text-zinc-300">@_selected.Count</span> / @Streams.Count
-        </p>
-        <div class="flex gap-2 text-xs">
-            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="SelectAll">Select all</button>
-            <span class="text-zinc-700">|</span>
-            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="ClearAll">Clear</button>
-            <span class="text-zinc-700">|</span>
-            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Income))">Income only</button>
-            <span class="text-zinc-700">|</span>
-            <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Outcome))">Outcome only</button>
-            @if (Streams.Any(s => s.Direction == Direction.Performance))
-            {
+<details class="border border-zinc-800 rounded mb-6">
+    <summary class="px-3 sm:px-4 py-2 cursor-pointer text-xs uppercase tracking-wide text-zinc-500 flex items-center justify-between">
+        <span>Streams in view <span class="text-zinc-300">@_selected.Count</span> / @Streams.Count</span>
+        <span class="text-zinc-600">▾</span>
+    </summary>
+    <div class="px-3 sm:px-4 py-3 border-t border-zinc-800 space-y-3">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+            <input type="text" placeholder="Search streams…" @bind="_search" @bind:event="oninput"
+                   class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs w-48 focus:outline-none focus:border-zinc-500" />
+            <div class="flex gap-2 text-xs">
+                <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="SelectAll">Select all</button>
                 <span class="text-zinc-700">|</span>
-                <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="@(() => SelectDirection(Direction.Performance))">Performance only</button>
-            }
+                <button type="button" class="text-zinc-400 hover:text-zinc-100" @onclick="ClearAll">Clear</button>
+            </div>
         </div>
-    </div>
-    <div class="flex flex-wrap gap-2">
-        @foreach (var s in Streams)
+        @foreach (var group in Grouped())
         {
-            var on = _selected.Contains(s.Id);
-            <button type="button"
-                    class="@ChipClass(s, on)"
-                    @onclick="@(() => Toggle(s.Id))">
-                @s.Name
-                <span class="text-xs opacity-70 ml-1">@(s.Direction == Direction.Income ? "+" : s.Direction == Direction.Performance ? "±" : "−")</span>
-            </button>
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-xs font-medium text-zinc-300">@group.Key (@group.Items.Count)</span>
+                    <button type="button" class="text-xs text-zinc-500 hover:text-zinc-200" @onclick="@(() => ToggleGroup(group.Items))">toggle</button>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                    @foreach (var s in group.Items)
+                    {
+                        <label class="@ChipClass(s, _selected.Contains(s.Id))">
+                            <input type="checkbox" class="mr-1 align-middle" checked="@_selected.Contains(s.Id)"
+                                   @onchange="@(() => Toggle(s.Id))" />@s.Name
+                        </label>
+                    }
+                </div>
+            </div>
         }
     </div>
-</div>
+</details>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<StreamSummaryView> Streams { get; set; } = [];
     [Parameter] public EventCallback<IReadOnlyCollection<Guid>> SelectionChanged { get; set; }
 
     private HashSet<Guid> _selected = new();
+    private string _search = "";
 
     protected override void OnParametersSet()
     {
         if (_selected.Count == 0 && Streams.Count > 0)
-        {
             _selected = Streams.Select(s => s.Id).ToHashSet();
+    }
+
+    private sealed record Group(string Key, List<StreamSummaryView> Items);
+
+    private IEnumerable<Group> Grouped()
+    {
+        bool Match(StreamSummaryView s) => string.IsNullOrWhiteSpace(_search)
+            || s.Name.Contains(_search, StringComparison.OrdinalIgnoreCase);
+        Group? G(string key, Direction d)
+        {
+            var items = Streams.Where(s => s.Direction == d && Match(s)).ToList();
+            return items.Count > 0 ? new Group(key, items) : null;
         }
+        return new[] { G("Income", Direction.Income), G("Outcome", Direction.Outcome), G("Performance", Direction.Performance) }
+            .OfType<Group>();
     }
 
     private Task Toggle(Guid id)
@@ -54,36 +70,29 @@
         return Emit();
     }
 
-    private Task SelectAll()
+    private Task ToggleGroup(List<StreamSummaryView> items)
     {
-        _selected = Streams.Select(s => s.Id).ToHashSet();
+        var ids = items.Select(i => i.Id).ToList();
+        var allOn = ids.All(_selected.Contains);
+        _selected = allOn
+            ? new HashSet<Guid>(_selected.Where(x => !ids.Contains(x)))
+            : new HashSet<Guid>(_selected.Concat(ids));
         return Emit();
     }
 
-    private Task ClearAll()
-    {
-        _selected = new HashSet<Guid>();
-        return Emit();
-    }
-
-    private Task SelectDirection(Direction direction)
-    {
-        _selected = Streams.Where(s => s.Direction == direction).Select(s => s.Id).ToHashSet();
-        return Emit();
-    }
-
+    private Task SelectAll() { _selected = Streams.Select(s => s.Id).ToHashSet(); return Emit(); }
+    private Task ClearAll() { _selected = new HashSet<Guid>(); return Emit(); }
     private Task Emit() => SelectionChanged.InvokeAsync(new HashSet<Guid>(_selected));
 
     private static string ChipClass(StreamSummaryView s, bool on)
     {
-        var baseCls = "px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors";
-        if (!on)
-            return $"{baseCls} bg-zinc-900 text-zinc-500 border border-zinc-800 hover:border-zinc-600";
+        var b = "px-2 py-0.5 rounded text-xs whitespace-nowrap cursor-pointer border";
+        if (!on) return $"{b} bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-600";
         return s.Direction switch
         {
-            Direction.Income => $"{baseCls} bg-emerald-900/40 text-emerald-200 border border-emerald-700/50",
-            Direction.Performance => $"{baseCls} bg-amber-900/40 text-amber-200 border border-amber-700/50",
-            _ => $"{baseCls} bg-rose-900/40 text-rose-200 border border-rose-700/50",
+            Direction.Income => $"{b} bg-emerald-900/40 text-emerald-200 border-emerald-700/50",
+            Direction.Performance => $"{b} bg-amber-900/40 text-amber-200 border-amber-700/50",
+            _ => $"{b} bg-rose-900/40 text-rose-200 border-rose-700/50",
         };
     }
 }
