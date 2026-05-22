@@ -3,6 +3,7 @@ using Crucible.Chains.DependencyInjection;
 using Npgsql;
 using Observa.Components;
 using Observa.Connectors.Abstractions;
+using Observa.Connectors.Blofin;
 using Observa.Connectors.Patreon;
 using Observa.Features.Connectors.Catalog;
 using Observa.Features.Seed;
@@ -47,6 +48,7 @@ builder.Services.AddSingleton<ConnectorCatalogService>();
 builder.Services.AddSingleton<IConnector, ManualConnector>();
 builder.Services.AddSingleton<IConnector, RecurringConnector>();
 builder.Services.AddPatreonConnectors(builder.Configuration);
+builder.Services.AddBlofinConnectors(builder.Configuration);
 builder.Services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 builder.Services.AddSingleton<ConnectorPollOrchestrator>();
 

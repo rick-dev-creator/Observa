@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Observa.ServiceDefaults\Observa.ServiceDefaults.csproj" />
     <ProjectReference Include="..\Observa.Connectors.Abstractions\Observa.Connectors.Abstractions.csproj" />
+    <ProjectReference Include="..\Observa.Connectors.Blofin\Observa.Connectors.Blofin.csproj" />
     <ProjectReference Include="..\Observa.Connectors.Patreon\Observa.Connectors.Patreon.csproj" />
   </ItemGroup>
 
