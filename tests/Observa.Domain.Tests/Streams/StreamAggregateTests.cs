@@ -523,6 +523,21 @@ public sealed class StreamAggregateTests
         stream.Binding!.LastSync.Should().Be(at);
     }
 
+    [Fact]
+    public void RecordPoll_PreservesBindingSnapshotState()
+    {
+        const string snapshotJson = "{\"q\":5,\"p\":10}";
+        var binding = ConnectorBinding.Create(new ConnectorId("solana"), "mint123", null, snapshotJson).Value;
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: binding));
+
+        var result = stream.RecordPoll(DateTimeOffset.UtcNow);
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Binding!.SnapshotState.Should().Be(snapshotJson);
+        stream.Binding!.LastSync.Should().NotBeNull();
+    }
+
     // --- Performance direction tests ---
 
     private static Stream RegisteredStream(Direction direction)
