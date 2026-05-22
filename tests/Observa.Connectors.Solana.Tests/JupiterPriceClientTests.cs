@@ -11,9 +11,10 @@ public sealed class JupiterPriceClientTests
     [Fact]
     public async Task GetUsdPriceAsync_ParsesPrice()
     {
-        var json = "{\"data\":{\"" + Mint + "\":{\"id\":\"" + Mint + "\",\"type\":\"derivedPrice\",\"price\":\"152.34\"}}}";
+        // Jupiter Price v3 shape: root keyed by mint, numeric `usdPrice`.
+        var json = "{\"" + Mint + "\":{\"usdPrice\":152.34,\"decimals\":9,\"blockId\":1}}";
         var http = new HttpClient(new StubHttpMessageHandler(HttpStatusCode.OK, json))
-            { BaseAddress = new Uri("https://api.jup.ag") };
+            { BaseAddress = new Uri("https://lite-api.jup.ag") };
         var client = new JupiterPriceClient(http, NullLogger<JupiterPriceClient>.Instance);
 
         var price = await client.GetUsdPriceAsync(Mint, CancellationToken.None);
@@ -24,8 +25,8 @@ public sealed class JupiterPriceClientTests
     [Fact]
     public async Task GetUsdPriceAsync_MissingMint_ReturnsNull()
     {
-        var http = new HttpClient(new StubHttpMessageHandler(HttpStatusCode.OK, """{"data":{}}"""))
-            { BaseAddress = new Uri("https://api.jup.ag") };
+        var http = new HttpClient(new StubHttpMessageHandler(HttpStatusCode.OK, "{}"))
+            { BaseAddress = new Uri("https://lite-api.jup.ag") };
         var client = new JupiterPriceClient(http, NullLogger<JupiterPriceClient>.Instance);
 
         (await client.GetUsdPriceAsync(Mint, CancellationToken.None)).Should().BeNull();

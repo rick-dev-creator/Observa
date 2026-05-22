@@ -22,7 +22,7 @@ public sealed class SolanaSnapshotConnectorTests
     }
 
     private static string Lamports(long v) => "{\"jsonrpc\":\"2.0\",\"result\":{\"value\":" + v + "},\"id\":1}";
-    private static string Price(decimal p) => "{\"data\":{\"" + Mint + "\":{\"price\":\"" + p.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\"}}}";
+    private static string Price(decimal p) => "{\"" + Mint + "\":{\"usdPrice\":" + p.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}}";
 
     [Fact]
     public async Task FirstPoll_EstablishesBaseline_NoDelta()

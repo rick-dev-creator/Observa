@@ -38,16 +38,27 @@ public sealed class SolanaRpcClient(HttpClient http, ILogger<SolanaRpcClient> lo
     private async Task<T> RpcCallAsync<T>(string method, object[] @params, CancellationToken ct, Func<JsonElement, T> readResult)
     {
         var req = new { jsonrpc = "2.0", id = 1, method, @params };
-        using var res = await http.PostAsJsonAsync("", req, ct);
-        if (!res.IsSuccessStatusCode)
+
+        // Public RPCs rate-limit (429). One short backoff-and-retry handles transient throttling.
+        for (var attempt = 0; ; attempt++)
         {
-            logger.LogWarning("Solana RPC {Method} returned {Status}.", method, (int)res.StatusCode);
-            throw new HttpRequestException($"Solana RPC {method} status {(int)res.StatusCode}");
+            using var res = await http.PostAsJsonAsync("", req, ct);
+            if (res.StatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt == 0)
+            {
+                logger.LogWarning("Solana RPC {Method} rate-limited (429); retrying once.", method);
+                await Task.Delay(TimeSpan.FromSeconds(2), ct);
+                continue;
+            }
+            if (!res.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Solana RPC {Method} returned {Status}.", method, (int)res.StatusCode);
+                throw new HttpRequestException($"Solana RPC {method} status {(int)res.StatusCode}");
+            }
+            await using var stream = await res.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("result", out var result))
+                throw new InvalidOperationException("Solana RPC response missing 'result'.");
+            return readResult(result);
         }
-        await using var stream = await res.Content.ReadAsStreamAsync(ct);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-        if (!doc.RootElement.TryGetProperty("result", out var result))
-            throw new InvalidOperationException("Solana RPC response missing 'result'.");
-        return readResult(result);
     }
 }
