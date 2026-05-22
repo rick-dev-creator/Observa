@@ -167,8 +167,6 @@ public sealed class ConnectorPollOrchestrator(
             return;
         }
 
-        await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
-
         var ingested = 0;
         await using var scope = scopeFactory.CreateAsyncScope();
         var service = scope.ServiceProvider.GetRequiredService<StreamService>();
@@ -179,9 +177,22 @@ public sealed class ConnectorPollOrchestrator(
                 StreamId.From(streamId),
                 new IngestEventDto(now, sample.PerformanceDeltaUsd, IngestionSource.Connector,
                     $"snapshot-{now:yyyyMMddHHmmssfff}"), ct);
-            if (result.IsSuccess) ingested = 1;
-            else logger.LogWarning("Stream {StreamId} snapshot ingest failed: {Errors}",
-                streamId, string.Join(",", result.Errors.Select(e => e.ErrorCode)));
+            if (result.IsSuccess)
+            {
+                ingested = 1;
+                // Advance the snapshot state/capital ONLY after the change is safely recorded.
+                await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
+            }
+            else
+            {
+                logger.LogWarning("Stream {StreamId} snapshot ingest failed; NOT advancing snapshot state: {Errors}",
+                    streamId, string.Join(",", result.Errors.Select(e => e.ErrorCode)));
+            }
+        }
+        else
+        {
+            // Flat poll: no event to ingest, but advance the baseline state/capital.
+            await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
         }
 
         var pollResult = await service.RecordPollAsync(StreamId.From(streamId), now, ct);
