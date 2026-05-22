@@ -27,13 +27,21 @@
                     <InputRadio Value="Direction.Outcome" class="accent-rose-400" /> <span>Outcome</span>
                 </InputRadioGroup>
             </label>
+            <label class="flex items-center gap-2">
+                <InputRadioGroup @bind-Value="_form.Direction" Name="direction3">
+                    <InputRadio Value="Direction.Performance" class="accent-amber-400" /> <span>Performance</span>
+                </InputRadioGroup>
+            </label>
         </div>
     </div>
 
+@if (_form.Direction != Direction.Performance)
+{
     <div>
         <label class="block text-xs text-zinc-500 mb-1">Expected amount (USD, optional)</label>
         <InputNumber @bind-Value="_form.ExpectedAmount" class="@FieldCss" placeholder="8000.00" />
     </div>
+}
 
     <ScheduleField
         @bind-HasSchedule="_form.HasSchedule"
