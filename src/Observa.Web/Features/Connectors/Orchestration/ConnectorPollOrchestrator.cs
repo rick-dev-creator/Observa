@@ -174,12 +174,12 @@ public sealed class ConnectorPollOrchestrator(
         if (!sample.HasPrevious)
         {
             // First poll: just establish the baseline.
-            await grain.SetConnectorSnapshotStateAsync(sample.State);
+            await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
         }
         else if (sample.PerformanceDeltaUsd == 0m)
         {
             // Flat: no event, but advance the baseline.
-            await grain.SetConnectorSnapshotStateAsync(sample.State);
+            await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
         }
         else
         {
@@ -193,7 +193,7 @@ public sealed class ConnectorPollOrchestrator(
                 ingested = 1;
                 // Advance the baseline ONLY after the delta is safely recorded; otherwise the
                 // unrecorded change would be lost from the next delta computation.
-                await grain.SetConnectorSnapshotStateAsync(sample.State);
+                await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
             }
             else
             {

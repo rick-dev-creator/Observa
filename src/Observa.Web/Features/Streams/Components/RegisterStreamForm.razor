@@ -114,7 +114,7 @@
         ConnectorBinding? binding = null;
         if (!string.IsNullOrEmpty(_form.ConnectorId))
         {
-            var b = ConnectorBinding.Create(new ConnectorId(_form.ConnectorId), _form.ExternalRef ?? "", null, null);
+            var b = ConnectorBinding.Create(new ConnectorId(_form.ConnectorId), _form.ExternalRef ?? "", null, null, null);
             if (b.IsFailure) { _errors = b.Errors.Select(e => (e.ErrorCode, e.ErrorDescription)).ToList(); _submitting = false; return; }
             binding = b.Value;
         }

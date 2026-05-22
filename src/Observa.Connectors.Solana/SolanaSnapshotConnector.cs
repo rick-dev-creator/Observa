@@ -50,23 +50,23 @@ public sealed class SolanaSnapshotConnector : ISnapshotConnector
             if (p is null)
             {
                 _logger.LogWarning("Solana: no price for mint {Mint}; preserving previous state.", mint);
-                return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false);
+                return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false, CapitalBasisUsd: 0m);
             }
             price = p.Value;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Solana sample failed for mint {Mint}; preserving previous state.", mint);
-            return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false);
+            return new SnapshotSample(context.PreviousState ?? "", 0m, HasPrevious: false, CapitalBasisUsd: 0m);
         }
 
         var newState = SnapshotStateCodec.Serialize(quantity, price);
         var prev = SnapshotStateCodec.TryParse(context.PreviousState);
         if (prev is null)
-            return new SnapshotSample(newState, 0m, HasPrevious: false);
+            return new SnapshotSample(newState, 0m, HasPrevious: false, CapitalBasisUsd: 0m);
 
         // Performance = price movement on the quantity we already held. Quantity changes are capital, excluded.
         var delta = Math.Round(prev.Value.Quantity * (price - prev.Value.Price), 2);
-        return new SnapshotSample(newState, delta, HasPrevious: true);
+        return new SnapshotSample(newState, delta, HasPrevious: true, CapitalBasisUsd: 0m);
     }
 }

@@ -78,7 +78,8 @@ public sealed class StreamSeedService(
                     new ConnectorId("recurring"),
                     externalRef: item.Name.ToLowerInvariant().Replace(' ', '-'),
                     lastSync: now,
-                    snapshotState: null).Match(
+                    snapshotState: null,
+                    capitalBasisUsd: null).Match(
                     b => b,
                     _ => throw new InvalidOperationException("seed: invalid ConnectorBinding"));
 

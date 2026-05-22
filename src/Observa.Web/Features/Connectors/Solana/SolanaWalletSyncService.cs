@@ -58,7 +58,7 @@ public sealed class SolanaWalletSyncService(
         var created = 0;
         foreach (var token in toCreate)
         {
-            var binding = ConnectorBinding.Create(new ConnectorId(account.Id), token.Mint, null, null);
+            var binding = ConnectorBinding.Create(new ConnectorId(account.Id), token.Mint, null, null, null);
             if (binding.IsFailure)
             {
                 logger.LogWarning("Solana: could not build binding for {Mint}; skipping.", token.Mint);

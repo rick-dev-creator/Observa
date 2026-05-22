@@ -161,7 +161,7 @@ public partial class Stream : AggregateRoot<StreamId>
         if (Binding is null)
             return new BusinessRuleError(DomainErrors.Stream.NoBindingForPoll, "Cannot record poll on a stream without a connector binding.");
 
-        var rebound = ConnectorBinding.Create(Binding.ConnectorId, Binding.ExternalRef, at, Binding.SnapshotState);
+        var rebound = ConnectorBinding.Create(Binding.ConnectorId, Binding.ExternalRef, at, Binding.SnapshotState, Binding.CapitalBasisUsd);
         if (rebound.IsFailure)
             return Result<ConnectorPolled>.Failure(rebound.Errors);
         Binding = rebound.Value;
