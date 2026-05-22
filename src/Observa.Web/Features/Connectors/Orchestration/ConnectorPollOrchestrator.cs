@@ -178,7 +178,7 @@ public sealed class ConnectorPollOrchestrator(
             var result = await service.IngestEventAsync(
                 StreamId.From(streamId),
                 new IngestEventDto(now, sample.PerformanceDeltaUsd, IngestionSource.Connector,
-                    $"snapshot-{now:yyyyMMddHHmmss}"),
+                    $"snapshot-{now:yyyyMMddHHmmssfff}"),
                 ct);
             if (result.IsSuccess) ingested = 1;
             else
@@ -197,6 +197,15 @@ public sealed class ConnectorPollOrchestrator(
             Message = sample.HasPrevious
                 ? $"Snapshot delta {sample.PerformanceDeltaUsd:F2}, ingested {ingested}."
                 : "Snapshot baseline established (no event).",
+            Details = new Dictionary<string, string>
+            {
+                ["HasPrevious"] = sample.HasPrevious.ToString(),
+                ["DeltaUsd"] = sample.PerformanceDeltaUsd.ToString("F2"),
+                ["Ingested"] = ingested.ToString(),
+            },
         });
+
+        logger.LogInformation("Stream {StreamId} snapshot poll complete: hasPrevious={HasPrevious}, ingested {Ingested}.",
+            streamId, sample.HasPrevious, ingested);
     }
 }
