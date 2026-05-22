@@ -4,10 +4,13 @@
     [Parameter] public decimal Amount { get; set; }
     [Parameter] public Direction? Direction { get; set; }
 
+    private bool IsPerformance => Direction == Enums.Direction.Performance;
+
     private string ColorClass => Direction switch
     {
         Enums.Direction.Income => "text-emerald-400",
         Enums.Direction.Outcome => "text-rose-400",
+        Enums.Direction.Performance => Amount < 0 ? "text-rose-400" : "text-emerald-400",
         _ => "text-zinc-200",
     };
 
@@ -15,8 +18,13 @@
     {
         get
         {
-            var sign = Direction == Enums.Direction.Outcome ? "−" : "";
-            return $"{sign}${Amount:N2}";
+            if (IsPerformance)
+            {
+                var sign = Amount < 0 ? "−" : "+";
+                return $"{sign}${Math.Abs(Amount):N2}";
+            }
+            var outSign = Direction == Enums.Direction.Outcome ? "−" : "";
+            return $"{outSign}${Amount:N2}";
         }
     }
 }
