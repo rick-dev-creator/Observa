@@ -20,8 +20,8 @@ public sealed class SolanaWalletScannerTests
         var jup = new HttpClient(new RoutingStubHttpMessageHandler()
             .Add((u, b) => u.Contains("/price/v3") && u.Contains(Sol), "{\"" + Sol + "\":{\"usdPrice\":100}}")
             .Add((u, b) => u.Contains("/price/v3") && u.Contains("MintLOW"), "{\"MintLOW\":{\"usdPrice\":1}}")
-            .Add((u, b) => u.Contains("/tokens/") && u.Contains(Sol), """{"symbol":"SOL"}""")
-            .Add((u, b) => u.Contains("/tokens/") && u.Contains("MintLOW"), """{"symbol":"LOW"}"""))
+            .Add((u, b) => u.Contains("/tokens/") && u.Contains(Sol), "[{\"id\":\"" + Sol + "\",\"symbol\":\"SOL\"}]")
+            .Add((u, b) => u.Contains("/tokens/") && u.Contains("MintLOW"), """[{"id":"MintLOW","symbol":"LOW"}]"""))
             { BaseAddress = new Uri("https://lite-api.jup.ag") };
 
         var scanner = new SolanaWalletScanner(
