@@ -43,6 +43,10 @@ public sealed class ConnectorPollOrchestrator(
             return;
         }
 
+        // Record the poll time now so status (Last fired / Next fire estimate) is accurate for
+        // every poll — the initial poll on registration as well as scheduled reminder fires.
+        await grain.MarkPolledAsync(DateTimeOffset.UtcNow);
+
         await grain.LogActivityAsync(new ActivityLogEntry
         {
             Timestamp = DateTimeOffset.UtcNow,

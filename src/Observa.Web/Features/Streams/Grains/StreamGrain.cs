@@ -32,6 +32,12 @@ public sealed class StreamGrain(
         await state.WriteStateAsync();
     }
 
+    public async Task MarkPolledAsync(DateTimeOffset at)
+    {
+        state.State.LastConnectorPollAt = at;
+        await state.WriteStateAsync();
+    }
+
     public async Task EnsureConnectorPollReminderAsync(TimeSpan pollInterval)
     {
         if (pollInterval <= TimeSpan.Zero) return;
@@ -51,7 +57,8 @@ public sealed class StreamGrain(
         var streamId = this.GetPrimaryKey();
         var now = DateTimeOffset.UtcNow;
 
-        state.State.LastConnectorPollAt = now;
+        // LastConnectorPollAt is owned by the poll path (orchestrator → MarkPolledAsync),
+        // so it stays accurate for both reminder fires and the initial poll on registration.
         state.State.AppendActivityLog(new ActivityLogEntry
         {
             Timestamp = now,
