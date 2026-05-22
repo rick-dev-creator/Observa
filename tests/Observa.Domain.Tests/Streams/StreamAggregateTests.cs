@@ -26,7 +26,7 @@ public sealed class StreamAggregateTests
         new(DateTimeOffset.UtcNow, amount, IngestionSource.Manual);
 
     private static ConnectorBinding TestBinding(DateTimeOffset? lastSync = null) =>
-        ConnectorBinding.Create(new ConnectorId("test"), "ext-ref-1", lastSync).Match(
+        ConnectorBinding.Create(new ConnectorId("test"), "ext-ref-1", lastSync, null, null).Match(
             b => b,
             _ => throw new InvalidOperationException("test ConnectorBinding setup invalid"));
 
@@ -521,6 +521,32 @@ public sealed class StreamAggregateTests
 
         result.IsSuccess.Should().BeTrue();
         stream.Binding!.LastSync.Should().Be(at);
+    }
+
+    [Fact]
+    public void RecordPoll_PreservesBindingSnapshotState()
+    {
+        const string snapshotJson = "{\"q\":5,\"p\":10}";
+        var binding = ConnectorBinding.Create(new ConnectorId("solana"), "mint123", null, snapshotJson, null).Value;
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: binding));
+
+        var result = stream.RecordPoll(DateTimeOffset.UtcNow);
+
+        result.IsSuccess.Should().BeTrue();
+        stream.Binding!.SnapshotState.Should().Be(snapshotJson);
+        stream.Binding!.LastSync.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void RecordPoll_PreservesBindingCapitalBasis()
+    {
+        var binding = ConnectorBinding.Create(new ConnectorId("solana"), "mint", null, null, 500m).Value;
+        var stream = Stream.__CreateForChain();
+        stream.Register(ValidRegisterDto(binding: binding));
+
+        stream.RecordPoll(DateTimeOffset.UtcNow).IsSuccess.Should().BeTrue();
+        stream.Binding!.CapitalBasisUsd.Should().Be(500m);
     }
 
     // --- Performance direction tests ---

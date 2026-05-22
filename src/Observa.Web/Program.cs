@@ -5,12 +5,14 @@ using Observa.Components;
 using Observa.Connectors.Abstractions;
 using Observa.Connectors.Blofin;
 using Observa.Connectors.Patreon;
+using Observa.Connectors.Solana;
 using Observa.Features.Connectors.Catalog;
 using Observa.Features.Seed;
 using Observa.Features.Connectors.Manual;
 using Observa.Features.Connectors.Orchestration;
 using Observa.Features.Connectors.Recurring;
 using Observa.Features.Connectors.Registry;
+using Observa.Features.Connectors.Solana;
 using Observa.Features.Streams.Aggregates;
 using Observa.Features.Streams.Services;
 
@@ -49,6 +51,8 @@ builder.Services.AddSingleton<IConnector, ManualConnector>();
 builder.Services.AddSingleton<IConnector, RecurringConnector>();
 builder.Services.AddPatreonConnectors(builder.Configuration);
 builder.Services.AddBlofinConnectors(builder.Configuration);
+builder.Services.AddSolanaConnectors(builder.Configuration);
+builder.Services.AddHostedService<SolanaWalletSyncService>();
 builder.Services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
 builder.Services.AddSingleton<ConnectorPollOrchestrator>();
 

@@ -60,6 +60,12 @@ public sealed class ConnectorPollOrchestrator(
             },
         });
 
+        if (connector is ISnapshotConnector snapshotConnector)
+        {
+            await PollSnapshotAsync(grain, snapshotConnector, streamId, state.Binding, ct);
+            return;
+        }
+
         IReadOnlyList<ConnectorFlowEvent> fetched;
         try
         {
@@ -133,5 +139,83 @@ public sealed class ConnectorPollOrchestrator(
 
         logger.LogInformation("Stream {StreamId} poll complete: fetched {Fetched}, ingested {Ingested}.",
             streamId, fetched.Count, ingestedCount);
+    }
+
+    private async Task PollSnapshotAsync(
+        IStreamGrain grain,
+        ISnapshotConnector connector,
+        Guid streamId,
+        ConnectorBindingState binding,
+        CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        SnapshotSample sample;
+        try
+        {
+            sample = await connector.SampleAsync(
+                new SnapshotContext(streamId, binding.ExternalRef, binding.SnapshotState), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Snapshot connector '{ConnectorId}' sample failed for stream {StreamId}.",
+                binding.ConnectorId, streamId);
+            await grain.LogActivityAsync(new ActivityLogEntry
+            {
+                Timestamp = now, Kind = "PollFailed",
+                Message = $"Snapshot threw: {ex.GetType().Name}: {ex.Message}",
+            });
+            return;
+        }
+
+        var ingested = 0;
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var service = scope.ServiceProvider.GetRequiredService<StreamService>();
+
+        if (sample.PerformanceDeltaUsd != 0m)
+        {
+            var result = await service.IngestEventAsync(
+                StreamId.From(streamId),
+                new IngestEventDto(now, sample.PerformanceDeltaUsd, IngestionSource.Connector,
+                    $"snapshot-{now:yyyyMMddHHmmssfff}"), ct);
+            if (result.IsSuccess)
+            {
+                ingested = 1;
+                // Advance the snapshot state/capital ONLY after the change is safely recorded.
+                await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
+            }
+            else
+            {
+                logger.LogWarning("Stream {StreamId} snapshot ingest failed; NOT advancing snapshot state: {Errors}",
+                    streamId, string.Join(",", result.Errors.Select(e => e.ErrorCode)));
+            }
+        }
+        else
+        {
+            // Flat poll: no event to ingest, but advance the baseline state/capital.
+            await grain.SetConnectorSnapshotStateAsync(sample.State, sample.CapitalBasisUsd);
+        }
+
+        var pollResult = await service.RecordPollAsync(StreamId.From(streamId), now, ct);
+        if (pollResult.IsFailure)
+            logger.LogWarning("Stream {StreamId} RecordPoll failed: {Errors}",
+                streamId, string.Join(",", pollResult.Errors.Select(e => e.ErrorCode)));
+
+        await grain.LogActivityAsync(new ActivityLogEntry
+        {
+            Timestamp = now, Kind = "PollCompleted",
+            Message = sample.HasPrevious
+                ? $"Snapshot value Δ {sample.PerformanceDeltaUsd:F2}, ingested {ingested}."
+                : $"Snapshot baseline value {sample.PerformanceDeltaUsd:F2}, ingested {ingested}.",
+            Details = new Dictionary<string, string>
+            {
+                ["HasPrevious"] = sample.HasPrevious.ToString(),
+                ["ValueDeltaUsd"] = sample.PerformanceDeltaUsd.ToString("F2"),
+                ["CapitalBasisUsd"] = sample.CapitalBasisUsd.ToString("F2"),
+                ["Ingested"] = ingested.ToString(),
+            },
+        });
+
+        logger.LogInformation("Stream {StreamId} snapshot poll complete: hasPrevious={HasPrevious}, ingested {Ingested}.",
+            streamId, sample.HasPrevious, ingested);
     }
 }

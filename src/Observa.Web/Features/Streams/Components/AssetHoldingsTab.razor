@@ -1,0 +1,54 @@
+@if (Holdings.Count == 0)
+{
+    <div class="border border-dashed border-zinc-700 rounded p-8 text-center text-zinc-400 text-sm">
+        No asset holdings yet. Connect a wallet (e.g. Solana) and tokens worth ≥ the threshold appear here.
+    </div>
+}
+else
+{
+    <section class="border border-zinc-800 rounded overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-zinc-900/50 text-zinc-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-4 py-2 font-medium">Asset</th>
+                    <th class="text-right px-4 py-2 font-medium">Value</th>
+                    <th class="text-right px-4 py-2 font-medium">Capital</th>
+                    <th class="text-right px-4 py-2 font-medium">Return</th>
+                    <th class="text-right px-4 py-2 font-medium">%</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800">
+                @foreach (var h in Holdings)
+                {
+                    <tr class="hover:bg-zinc-900/40">
+                        <td class="px-4 py-2">
+                            <a href="streams/@h.StreamId" class="text-zinc-100 hover:text-white font-medium">@h.Symbol</a>
+                            <div class="text-xs text-zinc-500">@h.Category</div>
+                        </td>
+                        <td class="px-4 py-2 text-right tabular-nums text-zinc-100">@Fmt(h.ValueUsd)</td>
+                        <td class="px-4 py-2 text-right tabular-nums text-zinc-400">@Fmt(h.CapitalUsd)</td>
+                        <td class="px-4 py-2 text-right tabular-nums @ReturnColor(h.ReturnUsd)">@Signed(h.ReturnUsd)</td>
+                        <td class="px-4 py-2 text-right tabular-nums @ReturnColor(h.ReturnUsd)">@Pct(h.ReturnPct)</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="border-t border-zinc-700 bg-zinc-900/30 font-medium">
+                <tr>
+                    <td class="px-4 py-2 text-zinc-300">Total</td>
+                    <td class="px-4 py-2 text-right tabular-nums text-zinc-100">@Fmt(Holdings.Sum(h => h.ValueUsd))</td>
+                    <td class="px-4 py-2 text-right tabular-nums text-zinc-400">@Fmt(Holdings.Sum(h => h.CapitalUsd))</td>
+                    <td class="px-4 py-2 text-right tabular-nums @ReturnColor(Holdings.Sum(h => h.ReturnUsd))">@Signed(Holdings.Sum(h => h.ReturnUsd))</td>
+                    <td class="px-4 py-2"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<AssetHoldingView> Holdings { get; set; } = [];
+    private static string Fmt(decimal v) => $"${v:N2}";
+    private static string Signed(decimal v) => $"{(v >= 0 ? "+" : "−")}${Math.Abs(v):N2}";
+    private static string Pct(decimal? p) => p is { } v ? $"{(v >= 0 ? "+" : "")}{v:P1}" : "—";
+    private static string ReturnColor(decimal v) => v < 0 ? "text-rose-400" : "text-emerald-400";
+}

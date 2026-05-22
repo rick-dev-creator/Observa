@@ -35,6 +35,12 @@ services:
       Connectors__Blofin__0__ApiKey: ${BLOFIN_API_KEY:-}
       Connectors__Blofin__0__SecretKey: ${BLOFIN_SECRET_KEY:-}
       Connectors__Blofin__0__Passphrase: ${BLOFIN_PASSPHRASE:-}
+      Connectors__Solana__0__Id: solana-main
+      Connectors__Solana__0__DisplayName: ${SOLANA_DISPLAY_NAME:-Wallet}
+      Connectors__Solana__0__PollInterval: "24:00:00"
+      Connectors__Solana__0__WalletAddress: ${SOLANA_WALLET_ADDRESS:-}
+      Connectors__Solana__0__RpcUrl: ${SOLANA_RPC_URL:-https://api.mainnet-beta.solana.com}
+      Connectors__Solana__0__MinValueUsd: ${SOLANA_MIN_VALUE_USD:-10}
     ports:
       - "${WEB_PORT:-8080}:8080"
 

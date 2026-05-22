@@ -82,6 +82,23 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             .ToList();
     }
 
+    // An asset holding is a stream whose connector binding carries a capital basis (snapshot/asset connector).
+    internal static AssetHoldingView? BuildAssetHolding(StreamGrainState s)
+    {
+        if (s.Binding?.CapitalBasisUsd is not { } capital) return null;
+        var value = Math.Round(s.Events.Sum(e => e.Amount.Amount), 2);
+        var ret = Math.Round(value - capital, 2);
+        var pct = capital != 0 ? Math.Round(ret / capital, 4) : (decimal?)null;
+        return new AssetHoldingView(s.Id, s.Name, s.Category, value, Math.Round(capital, 2), ret, pct);
+    }
+
+    public async Task<IReadOnlyList<AssetHoldingView>> GetAssetHoldingsAsync(CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        return states.Select(BuildAssetHolding).OfType<AssetHoldingView>()
+            .OrderByDescending(h => h.ValueUsd).ToList();
+    }
+
     private static IReadOnlyList<StreamGrainState> ApplyFilter(
         IReadOnlyList<StreamGrainState> states,
         IReadOnlyCollection<Guid>? streamFilter)

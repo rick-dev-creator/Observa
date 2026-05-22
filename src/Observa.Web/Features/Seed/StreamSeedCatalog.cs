@@ -25,11 +25,8 @@ internal static class StreamSeedCatalog
         new("Health Insurance",       "Health",      Direction.Outcome,  480m, AnchorDay: 15, Variability.Fixed),
         new("Groceries Budget",       "Food",        Direction.Outcome,  800m, AnchorDay: 1,  Variability.Variable),
 
-        // 3 performance streams — signed monthly P&L (gains AND losses).
-        // For Performance, ExpectedAmount = monthly mean drift, Swing = symmetric swing magnitude.
-        new("Blofin Trading P&L",     "Crypto",      Direction.Performance, 250m, AnchorDay: 28, Variability.Variable, Swing: 1800m),
-        new("Solana Wallet",          "Crypto",      Direction.Performance, 400m, AnchorDay: 28, Variability.Variable, Swing: 3000m),
-        new("Stock Portfolio",        "Investments", Direction.Performance, 300m, AnchorDay: 28, Variability.Variable, Swing: 900m),
+        // Performance streams are NOT seeded synthetically — real ones come from connectors
+        // (e.g. the Solana wallet auto-discovery), so the dashboard shows only real volatile data.
     ];
 
     public sealed record SeedItem(

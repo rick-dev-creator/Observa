@@ -18,6 +18,12 @@ public sealed class StreamGrain(
     {
         newState.ActivityLog = state.State.ActivityLog;
         newState.LastConnectorPollAt = state.State.LastConnectorPollAt;
+        // SnapshotState is grain-owned (set by SetConnectorSnapshotStateAsync); preserve it if the
+        // incoming state didn't carry it but the existing binding had one.
+        if (newState.Binding is not null && newState.Binding.SnapshotState is null && state.State.Binding?.SnapshotState is not null)
+            newState.Binding.SnapshotState = state.State.Binding.SnapshotState;
+        if (newState.Binding is not null && newState.Binding.CapitalBasisUsd is null && state.State.Binding?.CapitalBasisUsd is not null)
+            newState.Binding.CapitalBasisUsd = state.State.Binding.CapitalBasisUsd;
         state.State = newState;
 
         if (logEntry is not null)
@@ -35,6 +41,14 @@ public sealed class StreamGrain(
     public async Task MarkPolledAsync(DateTimeOffset at)
     {
         state.State.LastConnectorPollAt = at;
+        await state.WriteStateAsync();
+    }
+
+    public async Task SetConnectorSnapshotStateAsync(string? snapshotState, decimal? capitalBasisUsd)
+    {
+        if (state.State.Binding is null) return;
+        state.State.Binding.SnapshotState = snapshotState;
+        state.State.Binding.CapitalBasisUsd = capitalBasisUsd;
         await state.WriteStateAsync();
     }
 
