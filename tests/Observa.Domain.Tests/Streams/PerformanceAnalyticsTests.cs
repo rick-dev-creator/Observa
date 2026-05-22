@@ -18,6 +18,46 @@ public sealed class PerformanceAnalyticsTests
     }
 
     [Fact]
+    public void ComputeCurrentMonth_NetMTD_IncludesPerformance()
+    {
+        // Build events dated within the current month
+        var now = DateTimeOffset.UtcNow;
+        var thisMonthEvent = new DateTimeOffset(now.Year, now.Month, now.Day, 12, 0, 0, TimeSpan.Zero);
+
+        var incomeStream = new StreamGrainState
+        {
+            Id = Guid.NewGuid(),
+            Direction = Direction.Income,
+            Status = StreamStatus.Active,
+            Events = new List<FlowEventSnapshot>
+            {
+                new() { Id = Guid.NewGuid(), OccurredAt = thisMonthEvent, Amount = new MoneyState { Amount = 1000m } },
+            },
+        };
+
+        var performanceStream = new StreamGrainState
+        {
+            Id = Guid.NewGuid(),
+            Direction = Direction.Performance,
+            Status = StreamStatus.Active,
+            Events = new List<FlowEventSnapshot>
+            {
+                // Signed negative (loss) — stored as-is per Task 3 convention
+                new() { Id = Guid.NewGuid(), OccurredAt = thisMonthEvent, Amount = new MoneyState { Amount = -300m } },
+            },
+        };
+
+        var states = new List<StreamGrainState> { incomeStream, performanceStream };
+
+        var result = StreamAnalyticsService.ComputeCurrentMonth(states);
+
+        result.IncomeMTD.Should().Be(1000m);
+        result.PerformanceMTD.Should().Be(-300m);
+        // Net = Income(1000) - Outcome(0) + Performance(-300) = 700
+        result.NetMTD.Should().Be(700m);
+    }
+
+    [Fact]
     public void ComputeMonthlyHistory_IncludesPerformanceInNet()
     {
         // Use last month (complete — not the current partial month) so we have a full bucket.

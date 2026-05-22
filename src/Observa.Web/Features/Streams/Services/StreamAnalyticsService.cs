@@ -128,7 +128,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             var bAvg = b.RecentAverage ?? 0m;
             decimal? sAvg = scenarioTrends.TryGetValue(id, out var s) ? s.RecentAverage : null;
             var sAvgValue = sAvg ?? 0m;
-            var sign = b.Direction == Direction.Income ? 1m : -1m;
+            var sign = b.Direction == Direction.Outcome ? -1m : 1m; // Income and Performance → +1, Outcome → −1
             var delta = (sAvgValue - bAvg) * sign;
             if (Math.Abs(delta) < 0.01m) continue;
             impacts.Add(new StreamImpactView(id, b.Name, b.Direction, bAvg, sAvg, delta));
@@ -327,13 +327,14 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         return result;
     }
 
-    private static MonthSummaryView ComputeCurrentMonth(IReadOnlyList<StreamGrainState> states)
+    internal static MonthSummaryView ComputeCurrentMonth(IReadOnlyList<StreamGrainState> states)
     {
         var now = DateTimeOffset.UtcNow;
         var startThisMonth = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
         var startPrevMonth = startThisMonth.AddMonths(-1);
         var endThisMonth = startThisMonth.AddMonths(1);
 
+        // Per-direction accumulators are kept because views expose Income/Outcome separately; net = Income - Outcome + Performance.
         decimal income = 0, outcome = 0, performance = 0;
         decimal prevIncomeSamePoint = 0, prevOutcomeSamePoint = 0, prevPerformanceSamePoint = 0;
         var prevSamePoint = startPrevMonth.AddDays((now - startThisMonth).TotalDays);
@@ -390,6 +391,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         }
 
         var floor = anchor.AddMonths(-(months - 1));
+        // Per-direction accumulators are kept because views expose Income/Outcome separately; net = Income - Outcome + Performance.
         foreach (var s in states)
         {
             foreach (var e in s.Events)
