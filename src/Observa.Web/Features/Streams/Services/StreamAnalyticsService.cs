@@ -881,6 +881,113 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         EarnSpendGranularity grain, int periods, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null) =>
         ComputeEarnSpend(ApplyFilter(await LoadAllAsync(ct), streamFilter), grain, periods, DateTimeOffset.UtcNow);
 
+    // "If you'd never spent": cumulative gross income (Income streams only) by month, from the first income to now.
+    internal static IReadOnlyList<TrajectoryPointView> ComputeGrossEarned(
+        IReadOnlyList<StreamGrainState> states, DateTimeOffset now)
+    {
+        var income = states.Where(s => s.Direction == Direction.Income)
+            .SelectMany(s => s.Events.Select(e => (e.OccurredAt, e.Amount.Amount))).ToList();
+        if (income.Count == 0) return Array.Empty<TrajectoryPointView>();
+
+        var first = income.Min(e => e.OccurredAt);
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var points = new List<TrajectoryPointView>();
+        decimal cum = 0;
+        for (var m = new DateTimeOffset(first.Year, first.Month, 1, 0, 0, 0, TimeSpan.Zero); m <= anchor; m = m.AddMonths(1))
+        {
+            var mEnd = m.AddMonths(1);
+            cum += income.Where(e => e.OccurredAt >= m && e.OccurredAt < mEnd).Sum(e => e.Amount);
+            points.Add(new TrajectoryPointView(m, Math.Round(cum, 2)));
+        }
+        return points;
+    }
+
+    // "What you really have": opening balance + cumulative (Income − Outcome), starting at the expense-tracking date
+    // (the only period where expenses are complete). Returns empty if no tracking date is set.
+    internal static IReadOnlyList<TrajectoryPointView> ComputeRealNetWorth(
+        IReadOnlyList<StreamGrainState> states, decimal openingBalance, DateTimeOffset? trackingStart, DateTimeOffset now)
+    {
+        if (trackingStart is not { } start) return Array.Empty<TrajectoryPointView>();
+
+        var flows = states.Where(s => s.Direction is Direction.Income or Direction.Outcome)
+            .SelectMany(s => s.Events.Select(e => (s.Direction, e.OccurredAt, e.Amount.Amount))).ToList();
+
+        var startMonth = new DateTimeOffset(start.Year, start.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        if (startMonth > anchor) return Array.Empty<TrajectoryPointView>();
+
+        var points = new List<TrajectoryPointView>();
+        decimal net = openingBalance;
+        for (var m = startMonth; m <= anchor; m = m.AddMonths(1))
+        {
+            var mEnd = m.AddMonths(1);
+            foreach (var f in flows.Where(e => e.OccurredAt >= m && e.OccurredAt < mEnd))
+                net += f.Direction == Direction.Income ? f.Amount : -f.Amount;
+            points.Add(new TrajectoryPointView(m, Math.Round(net, 2)));
+        }
+        return points;
+    }
+
+    // Projected gross earnings and net savings over each horizon, at the current monthly trend.
+    // Earnings trend = average monthly income over recent complete months; net trend = average monthly
+    // (Income − Outcome) over recent complete months from the expense-tracking date (where expenses are complete).
+    internal static IReadOnlyList<EarningsProjectionRowView> ComputeEarningsProjection(
+        IReadOnlyList<StreamGrainState> states, DateTimeOffset? trackingStart, DateTimeOffset now)
+    {
+        var flows = states.Where(s => s.Direction is Direction.Income or Direction.Outcome)
+            .SelectMany(s => s.Events.Select(e => (s.Direction, e.OccurredAt, e.Amount.Amount))).ToList();
+
+        // Average over the last 12 complete months (the current, partial month is excluded).
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var windowStart = anchor.AddMonths(-12);
+        var trackMonth = trackingStart is { } s ? new DateTimeOffset(s.Year, s.Month, 1, 0, 0, 0, TimeSpan.Zero) : (DateTimeOffset?)null;
+
+        decimal incomeSum = 0, netSum = 0;
+        var netMonthCount = 0;
+        for (var m = windowStart; m < anchor; m = m.AddMonths(1))
+        {
+            var mEnd = m.AddMonths(1);
+            var inc = flows.Where(f => f.Direction == Direction.Income && f.OccurredAt >= m && f.OccurredAt < mEnd).Sum(f => f.Amount);
+            var outc = flows.Where(f => f.Direction == Direction.Outcome && f.OccurredAt >= m && f.OccurredAt < mEnd).Sum(f => f.Amount);
+            incomeSum += inc;
+            if (trackMonth is null || m >= trackMonth)
+            {
+                netSum += inc - outc;
+                netMonthCount++;
+            }
+        }
+
+        var avgIncome = incomeSum / 12m;
+        var avgNet = netMonthCount > 0 ? netSum / netMonthCount : 0m;
+
+        var horizons = new[] { ("6 months", 6), ("12 months", 12), ("3 years", 36), ("5 years", 60) };
+        return horizons.Select(h => new EarningsProjectionRowView(
+            h.Item1, h.Item2, Math.Round(avgIncome * h.Item2, 2), Math.Round(avgNet * h.Item2, 2))).ToList();
+    }
+
+    public async Task<IReadOnlyList<TrajectoryPointView>> GetGrossEarnedAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null) =>
+        ComputeGrossEarned(ApplyFilter(await LoadAllAsync(ct), streamFilter), DateTimeOffset.UtcNow);
+
+    public async Task<IReadOnlyList<TrajectoryPointView>> GetRealNetWorthAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var settings = grains.GetGrain<Grains.IOverviewSettingsGrain>(Grains.OverviewSettingsGrain.Key);
+        var opening = await settings.GetOpeningBalanceAsync();
+        var trackingStart = await settings.GetExpenseTrackingStartAsync();
+        return ComputeRealNetWorth(states, opening, trackingStart, DateTimeOffset.UtcNow);
+    }
+
+    public async Task<IReadOnlyList<EarningsProjectionRowView>> GetEarningsProjectionAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var trackingStart = await grains.GetGrain<Grains.IOverviewSettingsGrain>(Grains.OverviewSettingsGrain.Key)
+            .GetExpenseTrackingStartAsync();
+        return ComputeEarningsProjection(states, trackingStart, DateTimeOffset.UtcNow);
+    }
+
     private async Task<IReadOnlyList<StreamGrainState>> LoadAllAsync(CancellationToken ct)
     {
         var index = grains.GetGrain<IStreamIndexGrain>(StreamIndexGrain.SingletonKey);

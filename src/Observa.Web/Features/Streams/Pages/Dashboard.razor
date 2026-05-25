@@ -57,44 +57,77 @@ else
     <YearOverYearStrip Rows="_yoy" />
 
     <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
-        <div class="flex flex-wrap items-end justify-between gap-3 mb-1">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-2">
             <div>
-                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Net worth trajectory</h2>
-                <p class="text-xs text-zinc-500">Stacked: savings + assets = net worth · right of "Today" = projection</p>
+                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Total earned</h2>
+                <p class="text-xs text-zinc-500">All income to date — what you'd have if you'd never spent a cent. An eye-opener, not your real balance.</p>
             </div>
-            <div class="text-right">
-                <div class="text-2xl font-semibold text-zinc-100 tabular-nums">@FormatMoney(_netWorthNow)</div>
-                <div class="text-xs text-zinc-500">net worth today</div>
-            </div>
+            @if (_grossEarned.Count > 0)
+            {
+                <div class="text-right">
+                    <div class="text-2xl font-semibold text-zinc-300 tabular-nums">@FormatMoney(_grossEarned[^1].Value)</div>
+                    <div class="text-xs text-zinc-500">earned since @_grossEarned[0].Date.ToString("MMM yyyy")</div>
+                </div>
+            }
         </div>
-        <NetWorthTrajectoryChart @key="@($"nw-{_filterKey}-{_expenseTrackingStart?.Ticks}")" Data="_trajectory" ExpenseTrackingStart="_expenseTrackingStart" />
-        @if (_projectedNetWorth is not null)
-        {
-            <p class="text-xs text-zinc-500 mt-2">
-                Projected end of period: <span class="text-zinc-200 tabular-nums">@FormatMoney(_projectedNetWorth.Value)</span>
-                @if (_projectedLow is not null && _projectedHigh is not null)
-                {
-                    <span class="text-zinc-600 tabular-nums"> (asset range @FormatMoney(_projectedLow.Value) – @FormatMoney(_projectedHigh.Value))</span>
-                }
-            </p>
-        }
-        <details class="mt-3">
-            <summary class="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">⚙ Adjust baseline</summary>
-            <div class="mt-3 flex flex-wrap gap-x-8 gap-y-3 border-t border-zinc-800 pt-3">
-                <label class="flex flex-col gap-1 text-xs">
-                    <span class="text-zinc-500">Opening balance</span>
-                    <input type="number" step="100" value="@_openingBalance" @onchange="OnOpeningBalanceChangedAsync"
-                           class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
-                    <span class="text-[11px] text-zinc-600">anchors savings to your real savings</span>
-                </label>
-                <label class="flex flex-col gap-1 text-xs">
-                    <span class="text-zinc-500">Expenses tracked from</span>
-                    <input type="date" value="@(_expenseTrackingStart?.ToString("yyyy-MM-dd"))" @onchange="OnExpenseTrackingStartChangedAsync"
-                           class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
-                    <span class="text-[11px] text-zinc-600">before this, savings is income-only</span>
-                </label>
+        <TrajectoryLineChart @key="@($"ge-{_filterKey}")" Points="_grossEarned" Name="Earned" ColorHex="#a1a1aa" />
+    </section>
+
+    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-2">
+            <div>
+                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Real net worth</h2>
+                <p class="text-xs text-zinc-500">Opening balance + income − expenses, only from when your expenses are fully tracked.</p>
             </div>
-        </details>
+            @if (_realNetWorth.Count > 0)
+            {
+                <div class="text-right">
+                    <div class="text-2xl font-semibold text-emerald-300 tabular-nums">@FormatMoney(_realNetWorth[^1].Value)</div>
+                    <div class="text-xs text-zinc-500">real net worth today</div>
+                </div>
+            }
+        </div>
+        @if (_realNetWorth.Count > 0)
+        {
+            <TrajectoryLineChart @key="@($"rn-{_filterKey}-{_expenseTrackingStart?.Ticks}")" Points="_realNetWorth" Name="Net worth" ColorHex="#34d399" />
+        }
+        else
+        {
+            <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-400 text-sm">
+                Set <span class="text-zinc-200">Expenses tracked from</span> below to draw your real net-worth line.
+            </div>
+        }
+        <div class="mt-3 flex flex-wrap gap-x-8 gap-y-3 border-t border-zinc-800 pt-3">
+            <label class="flex flex-col gap-1 text-xs">
+                <span class="text-zinc-500">Opening balance</span>
+                <input type="number" step="100" value="@_openingBalance" @onchange="OnOpeningBalanceChangedAsync"
+                       class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
+                <span class="text-[11px] text-zinc-600">your real net worth on the tracking date</span>
+            </label>
+            <label class="flex flex-col gap-1 text-xs">
+                <span class="text-zinc-500">Expenses tracked from</span>
+                <input type="date" value="@(_expenseTrackingStart?.ToString("yyyy-MM-dd"))" @onchange="OnExpenseTrackingStartChangedAsync"
+                       class="w-40 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
+                <span class="text-[11px] text-zinc-600">when your expenses became complete</span>
+            </label>
+        </div>
+    </section>
+
+    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
+        <div class="mb-3">
+            <h2 class="text-sm uppercase tracking-wide text-zinc-400">Projection · at current trend</h2>
+            <p class="text-xs text-zinc-500">If your recent monthly trend holds — what you'd earn (gross) and save (net of expenses).</p>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            @foreach (var r in _projection)
+            {
+                <div class="border border-zinc-800 rounded-lg p-4 bg-zinc-900/40">
+                    <div class="text-xs text-zinc-500">@r.Label</div>
+                    <div class="text-sm text-emerald-400 tabular-nums mt-1">Earn @FormatMoney(r.EarnedUsd, signed: true)</div>
+                    <div class="text-sm text-zinc-200 tabular-nums">Save @FormatMoney(r.NetUsd, signed: true)</div>
+                </div>
+            }
+        </div>
     </section>
 
     <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
@@ -337,15 +370,13 @@ else
     private IReadOnlyCollection<Guid>? _filter;
     private string _filterKey = "init";
     private IReadOnlyList<YearOverYearView> _yoy = [];
-    private IReadOnlyList<CumulativeBalancePointView> _trajectory = [];
+    private IReadOnlyList<TrajectoryPointView> _grossEarned = [];
+    private IReadOnlyList<TrajectoryPointView> _realNetWorth = [];
+    private IReadOnlyList<EarningsProjectionRowView> _projection = [];
     private IReadOnlyList<EarnSpendPointView> _earnSpend = [];
     private EarnSpendGranularity _grain = EarnSpendGranularity.Month;
     private decimal _openingBalance;
     private DateTimeOffset? _expenseTrackingStart;
-    private decimal _netWorthNow;
-    private decimal? _projectedNetWorth;
-    private decimal? _projectedLow;
-    private decimal? _projectedHigh;
 
     protected override async Task OnInitializedAsync()
     {
@@ -369,7 +400,9 @@ else
         _historyByStream = await Analytics.GetMonthlyHistoryByStreamAsync(12, CancellationToken.None, _filter);
         _holdings = await Analytics.GetAssetHoldingsAsync(CancellationToken.None);
         _yoy = await Analytics.GetYearOverYearAsync(CancellationToken.None, _filter);
-        ApplyTrajectory(await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None, _filter));
+        _grossEarned = await Analytics.GetGrossEarnedAsync(CancellationToken.None, _filter);
+        _realNetWorth = await Analytics.GetRealNetWorthAsync(CancellationToken.None, _filter);
+        _projection = await Analytics.GetEarningsProjectionAsync(CancellationToken.None, _filter);
         var settings = Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key);
         _openingBalance = await settings.GetOpeningBalanceAsync();
         _expenseTrackingStart = await settings.GetExpenseTrackingStartAsync();
@@ -458,7 +491,7 @@ else
         {
             await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetOpeningBalanceAsync(v);
             _openingBalance = v;
-            ApplyTrajectory(await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None, _filter));
+            _realNetWorth = await Analytics.GetRealNetWorthAsync(CancellationToken.None, _filter);
         }
     }
 
@@ -470,15 +503,7 @@ else
             : null;
         await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetExpenseTrackingStartAsync(start);
         _expenseTrackingStart = start;
-    }
-
-    private void ApplyTrajectory(IReadOnlyList<CumulativeBalancePointView> trajectory)
-    {
-        _trajectory = trajectory;
-        _netWorthNow = trajectory.LastOrDefault(p => !p.IsProjected)?.Balance ?? 0m;
-        var lastProj = trajectory.LastOrDefault(p => p.IsProjected);
-        _projectedNetWorth = lastProj?.Balance;
-        _projectedLow = lastProj?.BandLow;
-        _projectedHigh = lastProj?.BandHigh;
+        _realNetWorth = await Analytics.GetRealNetWorthAsync(CancellationToken.None, _filter);
+        _projection = await Analytics.GetEarningsProjectionAsync(CancellationToken.None, _filter);
     }
 }
