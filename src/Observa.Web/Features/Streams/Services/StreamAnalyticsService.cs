@@ -800,6 +800,32 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         return ComputeNetWorthTrajectory(states, opening, futureMonths, DateTimeOffset.UtcNow);
     }
 
+    internal static IReadOnlyList<YearOverYearView> ComputeYearOverYear(
+        IReadOnlyList<StreamGrainState> states, DateTimeOffset now)
+    {
+        var byYear = new SortedDictionary<int, decimal>();
+        foreach (var s in states)
+        {
+            if (s.Direction == Direction.Performance) continue; // cash flow only
+            var sign = s.Direction == Direction.Outcome ? -1m : 1m;
+            foreach (var e in s.Events)
+                byYear[e.OccurredAt.Year] = byYear.GetValueOrDefault(e.OccurredAt.Year) + sign * e.Amount.Amount;
+        }
+
+        var rows = new List<YearOverYearView>();
+        decimal? prev = null;
+        foreach (var (year, net) in byYear)
+        {
+            decimal? chg = prev is { } p && p != 0 ? Math.Round((net - p) / Math.Abs(p), 4) : null;
+            rows.Add(new YearOverYearView(year, Math.Round(net, 2), chg, IsPartial: year == now.Year));
+            prev = net;
+        }
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<YearOverYearView>> GetYearOverYearAsync(CancellationToken ct) =>
+        ComputeYearOverYear(await LoadAllAsync(ct), DateTimeOffset.UtcNow);
+
     private async Task<IReadOnlyList<StreamGrainState>> LoadAllAsync(CancellationToken ct)
     {
         var index = grains.GetGrain<IStreamIndexGrain>(StreamIndexGrain.SingletonKey);
