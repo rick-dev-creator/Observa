@@ -792,9 +792,9 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
     }
 
     public async Task<IReadOnlyList<CumulativeBalancePointView>> GetNetWorthTrajectoryAsync(
-        int futureMonths, CancellationToken ct)
+        int futureMonths, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
     {
-        var states = await LoadAllAsync(ct);
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
         var opening = await grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key)
             .GetOpeningBalanceAsync();
         return ComputeNetWorthTrajectory(states, opening, futureMonths, DateTimeOffset.UtcNow);
@@ -823,8 +823,9 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         return rows;
     }
 
-    public async Task<IReadOnlyList<YearOverYearView>> GetYearOverYearAsync(CancellationToken ct) =>
-        ComputeYearOverYear(await LoadAllAsync(ct), DateTimeOffset.UtcNow);
+    public async Task<IReadOnlyList<YearOverYearView>> GetYearOverYearAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null) =>
+        ComputeYearOverYear(ApplyFilter(await LoadAllAsync(ct), streamFilter), DateTimeOffset.UtcNow);
 
     internal static IReadOnlyList<EarnSpendPointView> ComputeEarnSpend(
         IReadOnlyList<StreamGrainState> states, EarnSpendGranularity grain, int periods, DateTimeOffset now)
@@ -877,8 +878,8 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
     }
 
     public async Task<IReadOnlyList<EarnSpendPointView>> GetEarnSpendAsync(
-        EarnSpendGranularity grain, int periods, CancellationToken ct) =>
-        ComputeEarnSpend(await LoadAllAsync(ct), grain, periods, DateTimeOffset.UtcNow);
+        EarnSpendGranularity grain, int periods, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null) =>
+        ComputeEarnSpend(ApplyFilter(await LoadAllAsync(ct), streamFilter), grain, periods, DateTimeOffset.UtcNow);
 
     private async Task<IReadOnlyList<StreamGrainState>> LoadAllAsync(CancellationToken ct)
     {

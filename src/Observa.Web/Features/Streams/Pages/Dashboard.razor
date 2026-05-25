@@ -358,15 +358,10 @@ else
         _yearly = await Analytics.GetYearlyHistoryAsync(CancellationToken.None, _filter);
         _historyByStream = await Analytics.GetMonthlyHistoryByStreamAsync(12, CancellationToken.None, _filter);
         _holdings = await Analytics.GetAssetHoldingsAsync(CancellationToken.None);
-        _yoy = await Analytics.GetYearOverYearAsync(CancellationToken.None);
-        _trajectory = await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None);
-        _netWorthNow = _trajectory.LastOrDefault(p => !p.IsProjected)?.Balance ?? 0m;
-        var lastProj = _trajectory.LastOrDefault(p => p.IsProjected);
-        _projectedNetWorth = lastProj?.Balance;
-        _projectedLow = lastProj?.BandLow;
-        _projectedHigh = lastProj?.BandHigh;
+        _yoy = await Analytics.GetYearOverYearAsync(CancellationToken.None, _filter);
+        ApplyTrajectory(await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None, _filter));
         _openingBalance = await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).GetOpeningBalanceAsync();
-        _earnSpend = await Analytics.GetEarnSpendAsync(_grain, EarnSpendPeriods(_grain), CancellationToken.None);
+        _earnSpend = await Analytics.GetEarnSpendAsync(_grain, EarnSpendPeriods(_grain), CancellationToken.None, _filter);
     }
 
     private async Task OnFilterChangedAsync(IReadOnlyCollection<Guid> selection)
@@ -442,7 +437,7 @@ else
     private async Task OnGrainChangedAsync(EarnSpendGranularity g)
     {
         _grain = g;
-        _earnSpend = await Analytics.GetEarnSpendAsync(g, EarnSpendPeriods(g), CancellationToken.None);
+        _earnSpend = await Analytics.GetEarnSpendAsync(g, EarnSpendPeriods(g), CancellationToken.None, _filter);
     }
 
     private async Task OnOpeningBalanceChangedAsync(ChangeEventArgs e)
@@ -451,12 +446,17 @@ else
         {
             await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetOpeningBalanceAsync(v);
             _openingBalance = v;
-            _trajectory = await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None);
-            _netWorthNow = _trajectory.LastOrDefault(p => !p.IsProjected)?.Balance ?? 0m;
-            var lastProj = _trajectory.LastOrDefault(p => p.IsProjected);
-            _projectedNetWorth = lastProj?.Balance;
-            _projectedLow = lastProj?.BandLow;
-            _projectedHigh = lastProj?.BandHigh;
+            ApplyTrajectory(await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None, _filter));
         }
+    }
+
+    private void ApplyTrajectory(IReadOnlyList<CumulativeBalancePointView> trajectory)
+    {
+        _trajectory = trajectory;
+        _netWorthNow = trajectory.LastOrDefault(p => !p.IsProjected)?.Balance ?? 0m;
+        var lastProj = trajectory.LastOrDefault(p => p.IsProjected);
+        _projectedNetWorth = lastProj?.Balance;
+        _projectedLow = lastProj?.BandLow;
+        _projectedHigh = lastProj?.BandHigh;
     }
 }
