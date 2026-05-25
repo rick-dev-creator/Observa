@@ -262,7 +262,7 @@ Expected: `Build succeeded. 0 Error(s)`.
 
 ```bash
 git add src/Observa.Web/Features/Streams/Grains/IOverviewSettingsGrain.cs src/Observa.Web/Features/Streams/Grains/OverviewSettingsGrain.cs
-git commit -m "feat(streams): opening-balance settings singleton grain"
+git commit -m "feat(streams): opening-balance settings grain (fixed key)"
 ```
 
 ---
