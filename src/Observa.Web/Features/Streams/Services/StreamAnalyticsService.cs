@@ -826,6 +826,60 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
     public async Task<IReadOnlyList<YearOverYearView>> GetYearOverYearAsync(CancellationToken ct) =>
         ComputeYearOverYear(await LoadAllAsync(ct), DateTimeOffset.UtcNow);
 
+    internal static IReadOnlyList<EarnSpendPointView> ComputeEarnSpend(
+        IReadOnlyList<StreamGrainState> states, EarnSpendGranularity grain, int periods, DateTimeOffset now)
+    {
+        DateTimeOffset StartOf(DateTimeOffset t) => grain switch
+        {
+            EarnSpendGranularity.Day   => new DateTimeOffset(t.Year, t.Month, t.Day, 0, 0, 0, TimeSpan.Zero),
+            EarnSpendGranularity.Week  => new DateTimeOffset(t.Year, t.Month, t.Day, 0, 0, 0, TimeSpan.Zero).AddDays(-(int)t.DayOfWeek),
+            EarnSpendGranularity.Month => new DateTimeOffset(t.Year, t.Month, 1, 0, 0, 0, TimeSpan.Zero),
+            _                          => new DateTimeOffset(t.Year, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        };
+        DateTimeOffset Advance(DateTimeOffset s, int n) => grain switch
+        {
+            EarnSpendGranularity.Day   => s.AddDays(n),
+            EarnSpendGranularity.Week  => s.AddDays(7 * n),
+            EarnSpendGranularity.Month => s.AddMonths(n),
+            _                          => s.AddYears(n),
+        };
+        string Label(DateTimeOffset s) => grain switch
+        {
+            EarnSpendGranularity.Day   => s.ToString("d MMM"),
+            EarnSpendGranularity.Week  => "w/" + s.ToString("d MMM"),
+            EarnSpendGranularity.Month => s.ToString("MMM yy"),
+            _                          => s.Year.ToString(),
+        };
+
+        var anchor = StartOf(now);
+        var buckets = new List<(DateTimeOffset Start, DateTimeOffset End)>();
+        for (var i = periods - 1; i >= 0; i--)
+        {
+            var start = Advance(anchor, -i);
+            buckets.Add((start, Advance(start, 1)));
+        }
+
+        return buckets.Select(b =>
+        {
+            decimal inc = 0, outc = 0;
+            foreach (var s in states)
+            {
+                if (s.Direction == Direction.Performance) continue;
+                foreach (var e in s.Events)
+                {
+                    if (e.OccurredAt < b.Start || e.OccurredAt >= b.End) continue;
+                    if (s.Direction == Direction.Income) inc += e.Amount.Amount;
+                    else outc += e.Amount.Amount;
+                }
+            }
+            return new EarnSpendPointView(Label(b.Start), b.Start, Math.Round(inc, 2), Math.Round(outc, 2));
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyList<EarnSpendPointView>> GetEarnSpendAsync(
+        EarnSpendGranularity grain, int periods, CancellationToken ct) =>
+        ComputeEarnSpend(await LoadAllAsync(ct), grain, periods, DateTimeOffset.UtcNow);
+
     private async Task<IReadOnlyList<StreamGrainState>> LoadAllAsync(CancellationToken ct)
     {
         var index = grains.GetGrain<IStreamIndexGrain>(StreamIndexGrain.SingletonKey);
