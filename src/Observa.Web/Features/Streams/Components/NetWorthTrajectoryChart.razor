@@ -16,11 +16,59 @@
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<CumulativeBalancePointView> Data { get; set; } = [];
+    [Parameter] public DateTimeOffset? ExpenseTrackingStart { get; set; }
     private ApexChartOptions<CumulativeBalancePointView> _options = null!;
 
     protected override void OnParametersSet()
     {
         var lastHistorical = Data.LastOrDefault(p => !p.IsProjected);
+        var xAnnotations = new List<AnnotationsXAxis>();
+        if (lastHistorical is not null)
+            xAnnotations.Add(new AnnotationsXAxis
+            {
+                X = lastHistorical.Timestamp.ToUnixTimeMilliseconds(),
+                BorderColor = "#71717a",
+                StrokeDashArray = 5,
+                Label = new Label
+                {
+                    Text = "Today",
+                    BorderColor = "#71717a",
+                    Style = new Style { Background = "#27272a", Color = "#e4e4e7", FontSize = "11px" },
+                },
+            });
+
+        // Before expense tracking began, the savings layer is income-only (expenses untracked) and overstates
+        // net worth — shade and label that period so it reads as "what you'd have if you spent nothing", not real savings.
+        var firstPoint = Data.FirstOrDefault();
+        if (ExpenseTrackingStart is { } track && firstPoint is not null && firstPoint.Timestamp < track)
+        {
+            xAnnotations.Add(new AnnotationsXAxis
+            {
+                X = firstPoint.Timestamp.ToUnixTimeMilliseconds(),
+                X2 = track.ToUnixTimeMilliseconds(),
+                FillColor = "#a1a1aa",
+                Opacity = 0.06,
+                Label = new Label
+                {
+                    Text = "Income only · expenses untracked",
+                    BorderColor = "transparent",
+                    Style = new Style { Background = "#27272a", Color = "#a1a1aa", FontSize = "10px" },
+                },
+            });
+            xAnnotations.Add(new AnnotationsXAxis
+            {
+                X = track.ToUnixTimeMilliseconds(),
+                BorderColor = "#d97706",
+                StrokeDashArray = 4,
+                Label = new Label
+                {
+                    Text = "Full tracking",
+                    BorderColor = "#d97706",
+                    Style = new Style { Background = "#27272a", Color = "#fbbf24", FontSize = "11px" },
+                },
+            });
+        }
+
         _options = new ApexChartOptions<CumulativeBalancePointView>
         {
             Chart = new Chart
@@ -82,31 +130,7 @@
             },
             Legend = new Legend { Show = true, Position = LegendPosition.Top, HorizontalAlign = Align.Left },
             DataLabels = new DataLabels { Enabled = false },
-            Annotations = lastHistorical is not null
-                ? new Annotations
-                {
-                    Xaxis = new List<AnnotationsXAxis>
-                    {
-                        new()
-                        {
-                            X = lastHistorical.Timestamp.ToUnixTimeMilliseconds(),
-                            BorderColor = "#71717a",
-                            StrokeDashArray = 5,
-                            Label = new Label
-                            {
-                                Text = "Today",
-                                BorderColor = "#71717a",
-                                Style = new Style
-                                {
-                                    Background = "#27272a",
-                                    Color = "#e4e4e7",
-                                    FontSize = "11px",
-                                },
-                            },
-                        },
-                    },
-                }
-                : null,
+            Annotations = xAnnotations.Count > 0 ? new Annotations { Xaxis = xAnnotations } : null,
         };
     }
 }

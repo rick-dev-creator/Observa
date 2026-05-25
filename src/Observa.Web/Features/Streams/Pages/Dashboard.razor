@@ -67,7 +67,7 @@ else
                 <div class="text-xs text-zinc-500">net worth today</div>
             </div>
         </div>
-        <NetWorthTrajectoryChart @key="@($"nw-{_filterKey}")" Data="_trajectory" />
+        <NetWorthTrajectoryChart @key="@($"nw-{_filterKey}-{_expenseTrackingStart?.Ticks}")" Data="_trajectory" ExpenseTrackingStart="_expenseTrackingStart" />
         @if (_projectedNetWorth is not null)
         {
             <p class="text-xs text-zinc-500 mt-2">
@@ -90,6 +90,14 @@ else
                @onchange="OnOpeningBalanceChangedAsync"
                class="w-32 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-100 tabular-nums" />
         <span class="text-xs text-zinc-600">anchors the savings layer to your real savings</span>
+    </div>
+
+    <div class="flex items-center gap-2 mb-6 text-sm">
+        <span class="text-zinc-500">Expenses tracked from</span>
+        <input type="month" value="@(_expenseTrackingStart?.ToString("yyyy-MM"))"
+               @onchange="OnExpenseTrackingStartChangedAsync"
+               class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-100 tabular-nums" />
+        <span class="text-xs text-zinc-600">before this, savings is income-only (expenses untracked)</span>
     </div>
 
     <section class="border border-zinc-800 rounded p-5 sm:p-6 mb-6">
@@ -332,6 +340,7 @@ else
     private IReadOnlyList<EarnSpendPointView> _earnSpend = [];
     private EarnSpendGranularity _grain = EarnSpendGranularity.Month;
     private decimal _openingBalance;
+    private DateTimeOffset? _expenseTrackingStart;
     private decimal _netWorthNow;
     private decimal? _projectedNetWorth;
     private decimal? _projectedLow;
@@ -360,7 +369,9 @@ else
         _holdings = await Analytics.GetAssetHoldingsAsync(CancellationToken.None);
         _yoy = await Analytics.GetYearOverYearAsync(CancellationToken.None, _filter);
         ApplyTrajectory(await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None, _filter));
-        _openingBalance = await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).GetOpeningBalanceAsync();
+        var settings = Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key);
+        _openingBalance = await settings.GetOpeningBalanceAsync();
+        _expenseTrackingStart = await settings.GetExpenseTrackingStartAsync();
         _earnSpend = await Analytics.GetEarnSpendAsync(_grain, EarnSpendPeriods(_grain), CancellationToken.None, _filter);
     }
 
@@ -448,6 +459,16 @@ else
             _openingBalance = v;
             ApplyTrajectory(await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None, _filter));
         }
+    }
+
+    private async Task OnExpenseTrackingStartChangedAsync(ChangeEventArgs e)
+    {
+        DateTimeOffset? start = DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM",
+            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d)
+            ? new DateTimeOffset(d.Year, d.Month, 1, 0, 0, 0, TimeSpan.Zero)
+            : null;
+        await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetExpenseTrackingStartAsync(start);
+        _expenseTrackingStart = start;
     }
 
     private void ApplyTrajectory(IReadOnlyList<CumulativeBalancePointView> trajectory)
