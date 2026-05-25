@@ -78,27 +78,28 @@ else
                 }
             </p>
         }
+        <details class="mt-3">
+            <summary class="text-xs text-zinc-500 hover:text-zinc-300 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">⚙ Adjust baseline</summary>
+            <div class="mt-3 flex flex-wrap gap-x-8 gap-y-3 border-t border-zinc-800 pt-3">
+                <label class="flex flex-col gap-1 text-xs">
+                    <span class="text-zinc-500">Opening balance</span>
+                    <input type="number" step="100" value="@_openingBalance" @onchange="OnOpeningBalanceChangedAsync"
+                           class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
+                    <span class="text-[11px] text-zinc-600">anchors savings to your real savings</span>
+                </label>
+                <label class="flex flex-col gap-1 text-xs">
+                    <span class="text-zinc-500">Expenses tracked from</span>
+                    <input type="month" value="@(_expenseTrackingStart?.ToString("yyyy-MM"))" @onchange="OnExpenseTrackingStartChangedAsync"
+                           class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
+                    <span class="text-[11px] text-zinc-600">before this, savings is income-only</span>
+                </label>
+            </div>
+        </details>
     </section>
 
     <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
         <EarnSpendChart @key="@($"es-{_grain}")" Data="_earnSpend" Granularity="_grain" GranularityChanged="OnGrainChangedAsync" />
     </section>
-
-    <div class="flex items-center gap-2 mb-6 text-sm">
-        <span class="text-zinc-500">Opening balance</span>
-        <input type="number" step="100" value="@_openingBalance"
-               @onchange="OnOpeningBalanceChangedAsync"
-               class="w-32 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-100 tabular-nums" />
-        <span class="text-xs text-zinc-600">anchors the savings layer to your real savings</span>
-    </div>
-
-    <div class="flex items-center gap-2 mb-6 text-sm">
-        <span class="text-zinc-500">Expenses tracked from</span>
-        <input type="month" value="@(_expenseTrackingStart?.ToString("yyyy-MM"))"
-               @onchange="OnExpenseTrackingStartChangedAsync"
-               class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-zinc-100 tabular-nums" />
-        <span class="text-xs text-zinc-600">before this, savings is income-only (expenses untracked)</span>
-    </div>
 
     <section class="border border-zinc-800 rounded p-5 sm:p-6 mb-6">
         <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">This month so far</p>
