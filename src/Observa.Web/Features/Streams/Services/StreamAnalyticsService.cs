@@ -716,6 +716,82 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         return result;
     }
 
+    // Net-worth trajectory: savings layer = opening + cumulative(income−outcome) − asset capital(T);
+    // assets layer = cumulative Performance value. Projection holds assets flat at the last value with a
+    // ±band from historical monthly asset-value volatility; savings continues on its recent trend.
+    internal static IReadOnlyList<CumulativeBalancePointView> ComputeNetWorthTrajectory(
+        IReadOnlyList<StreamGrainState> states, decimal openingBalance, int futureMonths, DateTimeOffset now)
+    {
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var allEvents = states.SelectMany(s => s.Events.Select(e => (s.Direction, e.OccurredAt, e.Amount.Amount))).ToList();
+        if (allEvents.Count == 0) return Array.Empty<CumulativeBalancePointView>();
+
+        var first = allEvents.Min(e => e.OccurredAt);
+        var firstMonth = new DateTimeOffset(first.Year, first.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var assetBindings = states.Where(s => s.Direction == Direction.Performance && s.Binding is not null)
+            .Select(s => s.Binding!).ToList();
+
+        decimal MonthFlow(DateTimeOffset mStart, Direction dir)
+        {
+            var mEnd = mStart.AddMonths(1);
+            return allEvents.Where(e => e.Direction == dir && e.OccurredAt >= mStart && e.OccurredAt < mEnd)
+                            .Sum(e => e.Amount);
+        }
+
+        var points = new List<CumulativeBalancePointView>();
+        decimal runIncome = 0, runOutcome = 0, runValue = 0;
+        var assetMonthlyPct = new List<decimal>();
+        decimal prevValue = 0;
+
+        for (var m = firstMonth; m <= anchor; m = m.AddMonths(1))
+        {
+            runIncome += MonthFlow(m, Direction.Income);
+            runOutcome += MonthFlow(m, Direction.Outcome);
+            runValue += MonthFlow(m, Direction.Performance);
+            var capital = assetBindings.Sum(b => CapitalAt(b, m.AddMonths(1).AddTicks(-1)));
+
+            var savings = Math.Round(openingBalance + runIncome - runOutcome - capital, 2);
+            var assets = Math.Round(runValue, 2);
+            points.Add(new CumulativeBalancePointView(
+                m.ToString("MMM yy"), m, savings + assets, IsProjected: false, savings, assets));
+
+            if (prevValue != 0 && runValue != 0) assetMonthlyPct.Add((runValue - prevValue) / prevValue);
+            prevValue = runValue;
+        }
+
+        if (futureMonths > 0 && points.Count > 0)
+        {
+            var window = points.TakeLast(Math.Min(7, points.Count)).ToList();
+            var savingsSlope = window.Count > 1 ? (window[^1].StableBalance - window[0].StableBalance) / (window.Count - 1) : 0m;
+            var lastSavings = points[^1].StableBalance;
+            var flatAssets = points[^1].VolatileBalance;
+            var sigmaMonthly = assetMonthlyPct.Count > 1 ? StdDev(assetMonthlyPct.ToArray()) : 0m;
+
+            for (var i = 1; i <= futureMonths; i++)
+            {
+                var d = anchor.AddMonths(i);
+                var savings = Math.Round(lastSavings + savingsSlope * i, 2);
+                var nw = savings + flatAssets;
+                var band = Math.Round(flatAssets * sigmaMonthly * (decimal)Math.Sqrt(i), 2);
+                points.Add(new CumulativeBalancePointView(
+                    d.ToString("MMM yy"), d, nw, IsProjected: true, savings, flatAssets,
+                    BandLow: Math.Round(nw - band, 2), BandHigh: Math.Round(nw + band, 2)));
+            }
+        }
+
+        return points;
+    }
+
+    public async Task<IReadOnlyList<CumulativeBalancePointView>> GetNetWorthTrajectoryAsync(
+        int futureMonths, CancellationToken ct)
+    {
+        var states = await LoadAllAsync(ct);
+        var opening = await grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key)
+            .GetOpeningBalanceAsync();
+        return ComputeNetWorthTrajectory(states, opening, futureMonths, DateTimeOffset.UtcNow);
+    }
+
     private async Task<IReadOnlyList<StreamGrainState>> LoadAllAsync(CancellationToken ct)
     {
         var index = grains.GetGrain<IStreamIndexGrain>(StreamIndexGrain.SingletonKey);
