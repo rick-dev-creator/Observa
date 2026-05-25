@@ -15,6 +15,14 @@ public sealed class SolanaSnapshotConnector : ISnapshotConnector
     {
         if (string.IsNullOrWhiteSpace(options.Id))
             throw new InvalidOperationException("SolanaOptions.Id is required.");
+
+        // Guard the .NET TimeSpan trap: "24:00:00" parses as 24 DAYS, not 24 hours. A poll interval
+        // of a week or more for volatile crypto is almost certainly a mis-formatted configuration value.
+        if (options.PollInterval >= TimeSpan.FromDays(7))
+            logger.LogWarning("Solana account '{Id}' has a poll interval of {Interval} — likely a mis-formatted " +
+                "TimeSpan (note: \"24:00:00\" means 24 DAYS, not 24 hours; use \"01:00:00\" for hourly).",
+                options.Id, options.PollInterval);
+
         _options = options;
         _rpc = rpc;
         _jupiter = jupiter;
