@@ -1,0 +1,124 @@
+@using ApexCharts
+@using Observa.Features.Streams.Services.Views
+
+<div class="w-full">
+    <ApexChart TItem="CumulativeBalancePointView" Options="@_options" Height="300" Debug="false">
+        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Ahorro (cash)"
+                         SeriesType="SeriesType.Area"
+                         XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                         YValue="@(p => p.StableBalance)" />
+        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Activos"
+                         SeriesType="SeriesType.Area"
+                         XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                         YValue="@(p => p.VolatileBalance)" />
+        @if (Data.Any(p => p.BandHigh is not null))
+        {
+            <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Proy. alta"
+                             SeriesType="SeriesType.Line"
+                             XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                             YValue="@(p => p.BandHigh ?? p.Balance)" />
+            <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Proy. baja"
+                             SeriesType="SeriesType.Line"
+                             XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                             YValue="@(p => p.BandLow ?? p.Balance)" />
+        }
+    </ApexChart>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CumulativeBalancePointView> Data { get; set; } = [];
+    private ApexChartOptions<CumulativeBalancePointView> _options = null!;
+
+    protected override void OnParametersSet()
+    {
+        var lastHistorical = Data.LastOrDefault(p => !p.IsProjected);
+        _options = new ApexChartOptions<CumulativeBalancePointView>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                ForeColor = "#a1a1aa",
+                Toolbar = new Toolbar { Show = false },
+                Animations = new Animations { Enabled = true, Speed = 400 },
+                FontFamily = "ui-sans-serif, system-ui",
+                Zoom = new Zoom { Enabled = false },
+                Stacked = true,
+            },
+            Colors = new List<string> { "#38bdf8", "#34d399", "#34d399", "#34d399" },
+            Stroke = new Stroke
+            {
+                Curve = new List<Curve> { Curve.Smooth, Curve.Smooth, Curve.Straight, Curve.Straight },
+                Width = new List<double> { 2.5, 2.5, 1, 1 },
+                DashArray = new List<double> { 0, 0, 4, 4 },
+            },
+            Fill = new Fill
+            {
+                Type = new List<FillType> { FillType.Gradient, FillType.Gradient, FillType.Solid, FillType.Solid },
+                Gradient = new FillGradient
+                {
+                    ShadeIntensity = 1,
+                    OpacityFrom = 0.4,
+                    OpacityTo = 0.05,
+                    Stops = new List<double> { 0, 100 },
+                },
+            },
+            Markers = new Markers { Size = 0 },
+            Grid = new Grid { BorderColor = "#27272a", StrokeDashArray = 3 },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                AxisBorder = new AxisBorder { Color = "#27272a" },
+                Labels = new XAxisLabels
+                {
+                    Rotate = 0,
+                    HideOverlappingLabels = true,
+                    Format = "MMM yy",
+                },
+            },
+            Yaxis = new List<YAxis>
+            {
+                new()
+                {
+                    Labels = new YAxisLabels
+                    {
+                        Formatter = "function(v){return '$'+Math.round(v).toLocaleString('en-US');}",
+                    },
+                },
+            },
+            Tooltip = new Tooltip
+            {
+                Theme = Mode.Dark,
+                Shared = true,
+                Intersect = false,
+                Y = new TooltipY { Formatter = "function(v){return '$'+Math.round(v).toLocaleString('en-US');}" },
+            },
+            Legend = new Legend { Show = true, Position = LegendPosition.Top, HorizontalAlign = Align.Left },
+            DataLabels = new DataLabels { Enabled = false },
+            Annotations = lastHistorical is not null
+                ? new Annotations
+                {
+                    Xaxis = new List<AnnotationsXAxis>
+                    {
+                        new()
+                        {
+                            X = lastHistorical.Timestamp.ToUnixTimeMilliseconds(),
+                            BorderColor = "#71717a",
+                            StrokeDashArray = 5,
+                            Label = new Label
+                            {
+                                Text = "Hoy",
+                                BorderColor = "#71717a",
+                                Style = new Style
+                                {
+                                    Background = "#27272a",
+                                    Color = "#e4e4e7",
+                                    FontSize = "11px",
+                                },
+                            },
+                        },
+                    },
+                }
+                : null,
+        };
+    }
+}
