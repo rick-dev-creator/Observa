@@ -72,6 +72,10 @@ public sealed class StreamGrain(
             newState.Binding.SnapshotState = state.State.Binding.SnapshotState;
         if (newState.Binding is not null && newState.Binding.CapitalBasisUsd is null && state.State.Binding?.CapitalBasisUsd is not null)
             newState.Binding.CapitalBasisUsd = state.State.Binding.CapitalBasisUsd;
+        if (newState.Binding is not null
+            && newState.Binding.CapitalHistory.Count == 0
+            && state.State.Binding?.CapitalHistory is { Count: > 0 } existing)
+            newState.Binding.CapitalHistory = existing;
         state.State = newState;
 
         if (logEntry is not null)
@@ -97,6 +101,7 @@ public sealed class StreamGrain(
         if (state.State.Binding is null) return;
         state.State.Binding.SnapshotState = snapshotState;
         state.State.Binding.CapitalBasisUsd = capitalBasisUsd;
+        // Only record a history point when the connector reports a capital figure.
         if (capitalBasisUsd is { } cap)
         {
             var hist = state.State.Binding.CapitalHistory;
