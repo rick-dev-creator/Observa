@@ -16,7 +16,7 @@
 
 - `src/Observa.Web/Features/Streams/Grains/ConnectorBindingState.cs` — add capital history list (modify).
 - `src/Observa.Web/Features/Streams/Grains/StreamGrain.cs` — append capital point on `SetConnectorSnapshotStateAsync` (modify).
-- `src/Observa.Web/Features/Streams/Grains/OverviewSettingsGrain.cs` — opening-balance singleton (create).
+- `src/Observa.Web/Features/Streams/Grains/OverviewSettingsGrain.cs` — opening-balance settings grain, fixed key (create).
 - `src/Observa.Web/Features/Streams/Services/Views/CumulativeBalanceView.cs` — add `BandLow`/`BandHigh` (modify).
 - `src/Observa.Web/Features/Streams/Services/Views/YearOverYearView.cs` — create.
 - `src/Observa.Web/Features/Streams/Services/Views/EarnSpendView.cs` — create (record + `EarnSpendGranularity` enum).
@@ -202,7 +202,9 @@ git commit -m "feat(analytics): CapitalAt(binding, t) with history + fallback"
 
 ---
 
-## Task 3: Opening-balance singleton grain
+## Task 3: Opening-balance settings grain (fixed key)
+
+> A grain addressed by a fixed well-known key (`"all"`) — it activates on demand, deactivates when idle, and rehydrates its persisted state on reactivation. It is **not** an always-resident singleton; "one instance" is just a key convention.
 
 **Files:**
 - Create: `src/Observa.Web/Features/Streams/Grains/IOverviewSettingsGrain.cs`
@@ -222,7 +224,7 @@ public interface IOverviewSettingsGrain : IGrainWithStringKey
 }
 ```
 
-- [ ] **Step 2: Create the grain (mirror `StreamIndexGrain`)**
+- [ ] **Step 2: Create the grain (same persistence pattern as `StreamIndexGrain`, fixed key)**
 
 `OverviewSettingsGrain.cs`:
 
@@ -239,7 +241,7 @@ public sealed class OverviewSettingsGrain(
     [PersistentState("overview-settings")] IPersistentState<OverviewSettingsState> state)
     : Grain, IOverviewSettingsGrain
 {
-    public const string SingletonKey = "all";
+    public const string Key = "all"; // fixed well-known grain key (not a singleton instance)
 
     public Task<decimal> GetOpeningBalanceAsync() => Task.FromResult(state.State.OpeningBalanceUsd);
 
@@ -463,7 +465,7 @@ In `StreamAnalyticsService.cs`, add:
         int futureMonths, CancellationToken ct)
     {
         var states = await LoadAllAsync(ct);
-        var opening = await grains.GetGrain<Grains.IOverviewSettingsGrain>(Grains.OverviewSettingsGrain.SingletonKey)
+        var opening = await grains.GetGrain<Grains.IOverviewSettingsGrain>(Grains.OverviewSettingsGrain.Key)
             .GetOpeningBalanceAsync();
         return ComputeNetWorthTrajectory(states, opening, futureMonths, DateTimeOffset.UtcNow);
     }
@@ -1068,7 +1070,7 @@ In the data-loading method (where `_projection`, `_balance` etc. are loaded), re
         _yoy = await Analytics.GetYearOverYearAsync(CancellationToken.None);
         _trajectory = await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None);
         _netWorthNow = _trajectory.LastOrDefault(p => !p.IsProjected)?.Balance ?? 0m;
-        _openingBalance = await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.SingletonKey).GetOpeningBalanceAsync();
+        _openingBalance = await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).GetOpeningBalanceAsync();
         _earnSpend = await Analytics.GetEarnSpendAsync(_grain, EarnSpendPeriods(_grain), CancellationToken.None);
 ```
 
@@ -1091,7 +1093,7 @@ Add helper methods + handlers:
     {
         if (decimal.TryParse(e.Value?.ToString(), out var v))
         {
-            await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.SingletonKey).SetOpeningBalanceAsync(v);
+            await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetOpeningBalanceAsync(v);
             _openingBalance = v;
             _trajectory = await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None);
             _netWorthNow = _trajectory.LastOrDefault(p => !p.IsProjected)?.Balance ?? 0m;

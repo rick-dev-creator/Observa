@@ -68,7 +68,7 @@ Capital moving into assets is net-zero on net worth (leaves savings, enters asse
 - New analytics method: aggregate Income/Outcome events into buckets for a given grain + window.
 
 ### 4. Opening balance
-- A singleton grain storing one USD number (per deployment) + a small settings input.
+- A settings grain addressed by a fixed well-known key storing one USD number (per deployment) + a small settings input. (Not a singleton — it activates/deactivates on demand and rehydrates persisted state; "one instance" is a key convention.)
 - Offsets the savings layer so net worth reflects real starting savings, not just flow since tracking began.
 
 ## Placement / layout (Dashboard Overview)
@@ -83,7 +83,7 @@ Capital moving into assets is net-zero on net worth (leaves savings, enters asse
 - `YearOverYearView(int Year, decimal NetUsd, decimal? ChangePctVsPrior, bool IsPartial)`
 - `NetWorthPointView(DateTimeOffset At, decimal SavingsUsd, decimal AssetsUsd, bool IsProjected, decimal? BandLowUsd, decimal? BandHighUsd)`
 - `EarnSpendPointView(string Label, decimal IncomeUsd, decimal OutcomeUsd)` + a `Granularity` enum (Day/Week/Month/Year).
-- `OverviewSettings` (opening balance) singleton grain.
+- `OverviewSettings` (opening balance) grain with a fixed well-known key.
 - `ConnectorBindingState`: add capital history (`List<(DateTimeOffset At, decimal CapitalUsd)>` or equivalent), appended on snapshot poll.
 
 ## Testing
