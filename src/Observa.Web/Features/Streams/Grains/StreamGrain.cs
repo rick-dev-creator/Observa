@@ -97,6 +97,16 @@ public sealed class StreamGrain(
         if (state.State.Binding is null) return;
         state.State.Binding.SnapshotState = snapshotState;
         state.State.Binding.CapitalBasisUsd = capitalBasisUsd;
+        if (capitalBasisUsd is { } cap)
+        {
+            var hist = state.State.Binding.CapitalHistory;
+            // Coalesce: replace the last point if it is from the same day, else append.
+            var now = DateTimeOffset.UtcNow;
+            if (hist.Count > 0 && hist[^1].At.Date == now.Date)
+                hist[^1] = new CapitalPoint { At = now, CapitalUsd = cap };
+            else
+                hist.Add(new CapitalPoint { At = now, CapitalUsd = cap });
+        }
         await state.WriteStateAsync();
     }
 
