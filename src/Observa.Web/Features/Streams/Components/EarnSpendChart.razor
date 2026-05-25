@@ -3,8 +3,8 @@
 
 <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
     <div>
-        <h2 class="text-sm uppercase tracking-wide text-zinc-400">Gano / Gasto</h2>
-        <p class="text-xs text-zinc-500">Ingreso vs gasto por periodo · la línea es el neto</p>
+        <h2 class="text-sm uppercase tracking-wide text-zinc-400">Earn / Spend</h2>
+        <p class="text-xs text-zinc-500">Income vs spend per period · the line is net</p>
     </div>
     <div class="inline-flex rounded-md border border-zinc-700 overflow-hidden text-xs">
         @foreach (var g in _grains)
@@ -15,11 +15,11 @@
     </div>
 </div>
 <ApexChart TItem="EarnSpendPointView" Options="@_options" Height="260" Debug="false">
-    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Ingreso" SeriesType="SeriesType.Bar"
+    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Income" SeriesType="SeriesType.Bar"
                      XValue="@(p => p.Label)" YValue="@(p => p.IncomeUsd)" />
-    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Gasto" SeriesType="SeriesType.Bar"
+    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Spend" SeriesType="SeriesType.Bar"
                      XValue="@(p => p.Label)" YValue="@(p => p.OutcomeUsd)" />
-    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Neto" SeriesType="SeriesType.Line"
+    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Net" SeriesType="SeriesType.Line"
                      XValue="@(p => p.Label)" YValue="@(p => p.NetUsd)" />
 </ApexChart>
 <p class="text-[11px] text-zinc-600 mt-2">@Note(Granularity)</p>
@@ -37,15 +37,15 @@
 
     private static string Label(EarnSpendGranularity g) => g switch
     {
-        EarnSpendGranularity.Day => "Día", EarnSpendGranularity.Week => "Semana",
-        EarnSpendGranularity.Month => "Mes", _ => "Año",
+        EarnSpendGranularity.Day => "Day", EarnSpendGranularity.Week => "Week",
+        EarnSpendGranularity.Month => "Month", _ => "Year",
     };
     private static string Note(EarnSpendGranularity g) => g switch
     {
-        EarnSpendGranularity.Day => "Día: visible Blofin (diario) y picos puntuales (renta). Sueldo/Patreon son mensuales → pico en su día.",
-        EarnSpendGranularity.Week => "Semana: agrega lo diario; la renta aparece como pico ~mensual.",
-        EarnSpendGranularity.Month => "Mes: la granularidad natural de tus streams principales.",
-        _ => "Año: comparativa anual de ingreso vs gasto.",
+        EarnSpendGranularity.Day => "Day: BloFin (daily) and one-off spikes (rent) show; salary/Patreon are monthly → a spike on their day.",
+        EarnSpendGranularity.Week => "Week: aggregates the daily view; rent shows as a ~monthly spike.",
+        EarnSpendGranularity.Month => "Month: the natural grain of your main streams.",
+        _ => "Year: annual income vs spend comparison.",
     };
 
     private static ApexChartOptions<EarnSpendPointView> Build() => new()

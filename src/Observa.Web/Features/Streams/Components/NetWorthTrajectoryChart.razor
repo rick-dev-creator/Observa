@@ -3,11 +3,11 @@
 
 <div class="w-full">
     <ApexChart TItem="CumulativeBalancePointView" Options="@_options" Height="300" Debug="false">
-        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Ahorro (cash)"
+        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Savings (cash)"
                          SeriesType="SeriesType.Area"
                          XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
                          YValue="@(p => p.StableBalance)" />
-        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Activos"
+        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Assets"
                          SeriesType="SeriesType.Area"
                          XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
                          YValue="@(p => p.VolatileBalance)" />
@@ -94,7 +94,7 @@
                             StrokeDashArray = 5,
                             Label = new Label
                             {
-                                Text = "Hoy",
+                                Text = "Today",
                                 BorderColor = "#71717a",
                                 Style = new Style
                                 {
