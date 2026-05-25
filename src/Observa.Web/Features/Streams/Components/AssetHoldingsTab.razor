@@ -1,3 +1,5 @@
+@using System.Globalization
+
 @if (Holdings.Count == 0)
 {
     <div class="border border-dashed border-zinc-700 rounded p-8 text-center text-zinc-400 text-sm">
@@ -6,39 +8,91 @@
 }
 else
 {
-    <section class="border border-zinc-800 rounded overflow-hidden">
+    var totalValue = Holdings.Sum(h => h.ValueUsd);
+    var totalCapital = Holdings.Sum(h => h.CapitalUsd);
+    var totalReturn = Holdings.Sum(h => h.ReturnUsd);
+    var totalReturnPct = totalCapital != 0 ? totalReturn / totalCapital : (decimal?)null;
+    var open = Holdings.Where(h => !h.IsClosed).ToList();
+    var total24 = open.Sum(h => h.Change24hUsd);
+    var value24Ago = totalValue - total24;
+    var total24Pct = value24Ago != 0 ? total24 / value24Ago : (decimal?)null;
+    var top = open.OrderByDescending(h => h.ValueUsd).FirstOrDefault();
+    var concentration = top is not null && totalValue != 0 ? top.ValueUsd / totalValue : (decimal?)null;
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div class="border border-zinc-800 rounded-lg p-4 bg-zinc-900/40">
+            <div class="text-xs text-zinc-500 uppercase tracking-wide">Portfolio value</div>
+            <div class="text-2xl font-semibold text-zinc-100 tabular-nums mt-1">@Fmt(totalValue)</div>
+            <div class="text-xs text-zinc-500 tabular-nums mt-1">Capital <span class="text-zinc-400">@Fmt(totalCapital)</span></div>
+        </div>
+        <div class="border border-zinc-800 rounded-lg p-4 bg-zinc-900/40">
+            <div class="text-xs text-zinc-500 uppercase tracking-wide">Total return</div>
+            <div class="text-2xl font-semibold tabular-nums mt-1 @Color(totalReturn)">@Signed(totalReturn)</div>
+            <div class="text-xs tabular-nums mt-1 @Color(totalReturn)">@Pct(totalReturnPct) on capital</div>
+        </div>
+        <div class="border border-zinc-800 rounded-lg p-4 bg-zinc-900/40">
+            <div class="text-xs text-zinc-500 uppercase tracking-wide">24h change</div>
+            <div class="text-2xl font-semibold tabular-nums mt-1 @Color(total24)">@Signed(total24)</div>
+            <div class="text-xs tabular-nums mt-1 @Color(total24)">@Arrow(total24) @Pct(total24Pct)</div>
+        </div>
+        <div class="border border-zinc-800 rounded-lg p-4 bg-zinc-900/40">
+            <div class="text-xs text-zinc-500 uppercase tracking-wide">Concentration</div>
+            <div class="text-2xl font-semibold text-zinc-100 tabular-nums mt-1">@(concentration is { } c ? c.ToString("P0", CultureInfo.InvariantCulture) : "—")</div>
+            <div class="text-xs text-zinc-500 mt-1">@(top is not null ? $"{top.Symbol} is your largest position" : "")</div>
+        </div>
+    </div>
+
+    <section class="border border-zinc-800 rounded-lg overflow-hidden">
         <table class="w-full text-sm">
             <thead class="bg-zinc-900/50 text-zinc-500 text-xs uppercase tracking-wide">
                 <tr>
-                    <th class="text-left px-4 py-2 font-medium">Asset</th>
-                    <th class="text-right px-4 py-2 font-medium">Value</th>
-                    <th class="text-right px-4 py-2 font-medium">Capital</th>
-                    <th class="text-right px-4 py-2 font-medium">Return</th>
-                    <th class="text-right px-4 py-2 font-medium">%</th>
+                    <th class="text-left   px-4 py-2.5 font-medium">Asset</th>
+                    <th class="text-right  px-4 py-2.5 font-medium">Value</th>
+                    <th class="text-right  px-4 py-2.5 font-medium">24h</th>
+                    <th class="text-right  px-4 py-2.5 font-medium">7d</th>
+                    <th class="text-right  px-4 py-2.5 font-medium">Return</th>
+                    <th class="text-center px-4 py-2.5 font-medium">Last 7d</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-zinc-800">
                 @foreach (var h in Holdings)
                 {
-                    <tr class="hover:bg-zinc-900/40">
-                        <td class="px-4 py-2">
-                            <a href="streams/@h.StreamId" class="text-zinc-100 hover:text-white font-medium">@h.Symbol</a>
+                    var alloc = totalValue != 0 ? h.ValueUsd / totalValue : 0m;
+                    <tr class="hover:bg-zinc-900/40 @(h.IsClosed ? "opacity-50" : "")">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <a href="streams/@h.StreamId" class="text-zinc-100 hover:text-white font-medium">@h.Symbol</a>
+                                @if (h.IsClosed)
+                                {
+                                    <span class="text-[10px] uppercase tracking-wide text-zinc-500 border border-zinc-700 rounded px-1.5 py-0.5">closed</span>
+                                }
+                            </div>
                             <div class="text-xs text-zinc-500">@h.Category</div>
                         </td>
-                        <td class="px-4 py-2 text-right tabular-nums text-zinc-100">@Fmt(h.ValueUsd)</td>
-                        <td class="px-4 py-2 text-right tabular-nums text-zinc-400">@Fmt(h.CapitalUsd)</td>
-                        <td class="px-4 py-2 text-right tabular-nums @ReturnColor(h.ReturnUsd)">@Signed(h.ReturnUsd)</td>
-                        <td class="px-4 py-2 text-right tabular-nums @ReturnColor(h.ReturnUsd)">@Pct(h.ReturnPct)</td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="text-zinc-100 tabular-nums">@Fmt(h.ValueUsd)</div>
+                            <div class="mt-1 h-1 w-20 ml-auto bg-zinc-800 rounded overflow-hidden">
+                                <div class="h-full bg-zinc-500" style="width:@Width(alloc)"></div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-right tabular-nums @Color(h.Change24hUsd)">@ChangeCell(h, h.Change24hPct)</td>
+                        <td class="px-4 py-3 text-right tabular-nums @Color(h.Change7dUsd)">@ChangeCell(h, h.Change7dPct)</td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="tabular-nums @Color(h.ReturnUsd)">@Signed(h.ReturnUsd)</div>
+                            <div class="text-xs tabular-nums @Color(h.ReturnUsd)">@Pct(h.ReturnPct)</div>
+                        </td>
+                        <td class="px-4 py-3 text-center">@Spark(h.Sparkline)</td>
                     </tr>
                 }
             </tbody>
             <tfoot class="border-t border-zinc-700 bg-zinc-900/30 font-medium">
                 <tr>
-                    <td class="px-4 py-2 text-zinc-300">Total</td>
-                    <td class="px-4 py-2 text-right tabular-nums text-zinc-100">@Fmt(Holdings.Sum(h => h.ValueUsd))</td>
-                    <td class="px-4 py-2 text-right tabular-nums text-zinc-400">@Fmt(Holdings.Sum(h => h.CapitalUsd))</td>
-                    <td class="px-4 py-2 text-right tabular-nums @ReturnColor(Holdings.Sum(h => h.ReturnUsd))">@Signed(Holdings.Sum(h => h.ReturnUsd))</td>
-                    <td class="px-4 py-2"></td>
+                    <td class="px-4 py-2.5 text-zinc-300">Total</td>
+                    <td class="px-4 py-2.5 text-right tabular-nums text-zinc-100">@Fmt(totalValue)</td>
+                    <td class="px-4 py-2.5 text-right tabular-nums @Color(total24)">@Signed(total24)</td>
+                    <td class="px-4 py-2.5"></td>
+                    <td class="px-4 py-2.5 text-right tabular-nums @Color(totalReturn)">@Signed(totalReturn)</td>
+                    <td class="px-4 py-2.5"></td>
                 </tr>
             </tfoot>
         </table>
@@ -47,8 +101,41 @@ else
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<AssetHoldingView> Holdings { get; set; } = [];
-    private static string Fmt(decimal v) => $"${v:N2}";
-    private static string Signed(decimal v) => $"{(v >= 0 ? "+" : "−")}${Math.Abs(v):N2}";
-    private static string Pct(decimal? p) => p is { } v ? $"{(v >= 0 ? "+" : "")}{v:P1}" : "—";
-    private static string ReturnColor(decimal v) => v < 0 ? "text-rose-400" : "text-emerald-400";
+
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    private static string Fmt(decimal v) => $"${v.ToString("N2", Inv)}";
+    private static string Signed(decimal v) => $"{(v >= 0 ? "+" : "−")}${Math.Abs(v).ToString("N2", Inv)}";
+    private static string Pct(decimal? p) => p is { } v ? $"{(v >= 0 ? "+" : "−")}{Math.Abs(v).ToString("P2", Inv)}" : "—";
+    private static string Color(decimal v) => v < 0 ? "text-rose-400" : v > 0 ? "text-emerald-400" : "text-zinc-400";
+    private static string Arrow(decimal v) => v > 0 ? "▲" : v < 0 ? "▼" : "·";
+    private static string Width(decimal fraction) => $"{Math.Clamp(fraction * 100m, 0m, 100m).ToString("0.#", Inv)}%";
+
+    private static string ChangeCell(AssetHoldingView h, decimal? pct) =>
+        h.IsClosed ? "—" : $"{Arrow(pct ?? 0m)} {Pct(pct)}";
+
+    // Inline SVG sparkline of the holding's value over the recent window. Green if it ended up, red if down.
+    private static MarkupString Spark(IReadOnlyList<decimal> data)
+    {
+        if (data.Count < 2) return (MarkupString)"";
+        const int w = 120, h = 28;
+        var min = data.Min();
+        var max = data.Max();
+        var rng = max - min;
+        if (rng == 0) rng = 1m;
+
+        string X(int i) => ((double)i / (data.Count - 1) * w).ToString("0.#", Inv);
+        string Y(decimal v) => (h - (double)((v - min) / rng) * h).ToString("0.#", Inv);
+
+        var line = string.Join(" ", data.Select((v, i) => $"{(i == 0 ? "M" : "L")}{X(i)} {Y(v)}"));
+        var stroke = data[^1] >= data[0] ? "#34d399" : "#fb7185"; // emerald-400 / rose-400
+        var area = $"{line} L {w} {h} L 0 {h} Z";
+
+        var svg =
+            $"<svg width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\" class=\"inline-block align-middle\">" +
+            $"<path d=\"{area}\" fill=\"{stroke}\" opacity=\"0.10\"/>" +
+            $"<path d=\"{line}\" fill=\"none\" stroke=\"{stroke}\" stroke-width=\"1.5\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/>" +
+            "</svg>";
+        return (MarkupString)svg;
+    }
 }

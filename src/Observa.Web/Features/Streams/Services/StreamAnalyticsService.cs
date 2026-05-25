@@ -82,20 +82,68 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             .ToList();
     }
 
+    private const int SparklinePoints = 24;          // samples across the holding's recent window
+    private static readonly TimeSpan SparklineWindow = TimeSpan.FromDays(7);
+    private const decimal ClosedValueThreshold = 1m;  // value below this ⇒ position effectively exited
+
     // An asset holding is a stream whose connector binding carries a capital basis (snapshot/asset connector).
-    internal static AssetHoldingView? BuildAssetHolding(StreamGrainState s)
+    // Value at any instant is the cumulative sum of the (signed) Performance events up to that instant, so the
+    // event history *is* the value time-series — 24h / 7d change and the sparkline are derived from it, no extra
+    // storage. Series resolution improves as the hourly snapshot poll accumulates points.
+    internal static AssetHoldingView? BuildAssetHolding(StreamGrainState s, DateTimeOffset? asOf = null)
     {
         if (s.Binding?.CapitalBasisUsd is not { } capital) return null;
-        var value = Math.Round(s.Events.Sum(e => e.Amount.Amount), 2);
-        var ret = Math.Round(value - capital, 2);
-        var pct = capital != 0 ? Math.Round(ret / capital, 4) : (decimal?)null;
-        return new AssetHoldingView(s.Id, s.Name, s.Category, value, Math.Round(capital, 2), ret, pct);
+        var now = asOf ?? DateTimeOffset.UtcNow;
+
+        var events = s.Events.OrderBy(e => e.OccurredAt).ToList();
+        decimal ValueAt(DateTimeOffset t) => events.Where(e => e.OccurredAt <= t).Sum(e => e.Amount.Amount);
+
+        var valueRaw = ValueAt(now);
+        var value = Math.Round(valueRaw, 2);
+        var ret = Math.Round(valueRaw - capital, 2);
+        var pct = capital != 0 ? Math.Round((valueRaw - capital) / capital, 4) : (decimal?)null;
+
+        var v24 = ValueAt(now - TimeSpan.FromHours(24));
+        var change24 = Math.Round(valueRaw - v24, 2);
+        var change24Pct = v24 != 0 ? Math.Round((valueRaw - v24) / v24, 4) : (decimal?)null;
+
+        var v7d = ValueAt(now - SparklineWindow);
+        var change7d = Math.Round(valueRaw - v7d, 2);
+        var change7dPct = v7d != 0 ? Math.Round((valueRaw - v7d) / v7d, 4) : (decimal?)null;
+
+        var sparkline = BuildValueSparkline(events, now, ValueAt);
+        var isClosed = Math.Abs(value) < ClosedValueThreshold && capital >= ClosedValueThreshold;
+
+        return new AssetHoldingView(s.Id, s.Name, s.Category, value, Math.Round(capital, 2), ret, pct,
+            change24, change24Pct, change7d, change7dPct, sparkline, isClosed);
+    }
+
+    // Samples the cumulative value at evenly spaced points from the start of the recent window to now.
+    // Window starts at the first event (so a freshly tracked holding isn't padded with leading zeros),
+    // but never reaches further back than SparklineWindow.
+    private static IReadOnlyList<decimal> BuildValueSparkline(
+        IReadOnlyList<FlowEventSnapshot> orderedEvents, DateTimeOffset now, Func<DateTimeOffset, decimal> valueAt)
+    {
+        if (orderedEvents.Count == 0) return [0m];
+        var windowStart = now - SparklineWindow;
+        var start = orderedEvents[0].OccurredAt > windowStart ? orderedEvents[0].OccurredAt : windowStart;
+        if (start >= now) return [Math.Round(valueAt(now), 2)];
+
+        var span = now - start;
+        var points = new decimal[SparklinePoints];
+        for (var i = 0; i < SparklinePoints; i++)
+        {
+            var t = start + (span * i / (SparklinePoints - 1));
+            points[i] = Math.Round(valueAt(t), 2);
+        }
+        return points;
     }
 
     public async Task<IReadOnlyList<AssetHoldingView>> GetAssetHoldingsAsync(CancellationToken ct)
     {
+        var now = DateTimeOffset.UtcNow;
         var states = await LoadAllAsync(ct);
-        return states.Select(BuildAssetHolding).OfType<AssetHoldingView>()
+        return states.Select(s => BuildAssetHolding(s, now)).OfType<AssetHoldingView>()
             .OrderByDescending(h => h.ValueUsd).ToList();
     }
 
