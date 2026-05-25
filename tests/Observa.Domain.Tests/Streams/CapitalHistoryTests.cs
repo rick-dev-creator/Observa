@@ -23,6 +23,7 @@ public sealed class CapitalHistoryTests
 
         StreamAnalyticsService.CapitalAt(b, T(3)).Should().Be(100m);
         StreamAnalyticsService.CapitalAt(b, T(9)).Should().Be(300m);
+        StreamAnalyticsService.CapitalAt(b, T(5)).Should().Be(300m); // exact match At == t is included
     }
 
     [Fact]
@@ -47,5 +48,17 @@ public sealed class CapitalHistoryTests
         };
 
         StreamAnalyticsService.CapitalAt(b, T(3)).Should().Be(250m);
+    }
+
+    [Fact]
+    public void CapitalAt_NoHistoryAndNoCapital_IsZero()
+    {
+        var b = new ConnectorBindingState
+        {
+            ConnectorId = "solana-main", ExternalRef = "mint", CapitalBasisUsd = null,
+            CapitalHistory = new(),
+        };
+
+        StreamAnalyticsService.CapitalAt(b, T(3)).Should().Be(0m);
     }
 }
