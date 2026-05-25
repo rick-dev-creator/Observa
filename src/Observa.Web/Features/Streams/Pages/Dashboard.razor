@@ -89,7 +89,7 @@ else
                 </label>
                 <label class="flex flex-col gap-1 text-xs">
                     <span class="text-zinc-500">Expenses tracked from</span>
-                    <input type="month" value="@(_expenseTrackingStart?.ToString("yyyy-MM"))" @onchange="OnExpenseTrackingStartChangedAsync"
+                    <input type="date" value="@(_expenseTrackingStart?.ToString("yyyy-MM-dd"))" @onchange="OnExpenseTrackingStartChangedAsync"
                            class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
                     <span class="text-[11px] text-zinc-600">before this, savings is income-only</span>
                 </label>
@@ -464,9 +464,9 @@ else
 
     private async Task OnExpenseTrackingStartChangedAsync(ChangeEventArgs e)
     {
-        DateTimeOffset? start = DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM",
+        DateTimeOffset? start = DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM-dd",
             System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d)
-            ? new DateTimeOffset(d.Year, d.Month, 1, 0, 0, 0, TimeSpan.Zero)
+            ? new DateTimeOffset(d.Year, d.Month, d.Day, 0, 0, 0, TimeSpan.Zero)
             : null;
         await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetExpenseTrackingStartAsync(start);
         _expenseTrackingStart = start;
