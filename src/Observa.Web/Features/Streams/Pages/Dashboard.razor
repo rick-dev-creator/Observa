@@ -324,7 +324,6 @@ else
     private IReadOnlyList<YearlyAggregateView> _yearly = [];
     private IReadOnlyList<StreamSummaryView> _allStreams = [];
     private IReadOnlyList<MonthlyStreamPointView> _historyByStream = [];
-    private IReadOnlyList<YearlyStreamPointView> _yearlyByStream = [];
     private IReadOnlyList<AssetHoldingView> _holdings = [];
     private IReadOnlyCollection<Guid>? _filter;
     private string _filterKey = "init";
@@ -358,7 +357,6 @@ else
         _retrospective = await Analytics.GetRetrospectiveAsync(CancellationToken.None, _filter);
         _yearly = await Analytics.GetYearlyHistoryAsync(CancellationToken.None, _filter);
         _historyByStream = await Analytics.GetMonthlyHistoryByStreamAsync(12, CancellationToken.None, _filter);
-        _yearlyByStream = await Analytics.GetYearlyHistoryByStreamAsync(CancellationToken.None, _filter);
         _holdings = await Analytics.GetAssetHoldingsAsync(CancellationToken.None);
         _yoy = await Analytics.GetYearOverYearAsync(CancellationToken.None);
         _trajectory = await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None);
@@ -455,6 +453,10 @@ else
             _openingBalance = v;
             _trajectory = await Analytics.GetNetWorthTrajectoryAsync(6, CancellationToken.None);
             _netWorthNow = _trajectory.LastOrDefault(p => !p.IsProjected)?.Balance ?? 0m;
+            var lastProj = _trajectory.LastOrDefault(p => p.IsProjected);
+            _projectedNetWorth = lastProj?.Balance;
+            _projectedLow = lastProj?.BandLow;
+            _projectedHigh = lastProj?.BandHigh;
         }
     }
 }
