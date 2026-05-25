@@ -118,6 +118,22 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             change24, change24Pct, change7d, change7dPct, sparkline, isClosed);
     }
 
+    // Capital basis at an instant. Uses the recorded history; before the first point capital is 0.
+    // With no history (streams created before capital recording existed) we approximate with current capital.
+    internal static decimal CapitalAt(ConnectorBindingState binding, DateTimeOffset t)
+    {
+        var hist = binding.CapitalHistory;
+        if (hist is null || hist.Count == 0)
+            return binding.CapitalBasisUsd ?? 0m;
+        decimal capital = 0m;
+        foreach (var p in hist.OrderBy(p => p.At))
+        {
+            if (p.At > t) break;
+            capital = p.CapitalUsd;
+        }
+        return capital;
+    }
+
     // Samples the cumulative value at evenly spaced points from the start of the recent window to now.
     // Window starts at the first event (so a freshly tracked holding isn't padded with leading zeros),
     // but never reaches further back than SparklineWindow.
