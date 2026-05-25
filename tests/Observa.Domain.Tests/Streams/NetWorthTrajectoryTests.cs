@@ -73,5 +73,23 @@ public sealed class NetWorthTrajectoryTests
         projected.Should().OnlyContain(p => p.VolatileBalance == 620m);
         projected[0].BandHigh!.Value.Should().BeGreaterThan(projected[0].Balance);
         projected[2].BandHigh!.Value.Should().BeGreaterThan(projected[0].BandHigh!.Value);
+        projected.Should().OnlyContain(p => p.BandLow!.Value < p.Balance);
+    }
+
+    [Fact]
+    public void Trajectory_Projection_BandStaysOriented_WhenAssetsNegative()
+    {
+        var now = M(2026, 4);
+        var states = new List<StreamGrainState>
+        {
+            Income("Salary", (M(2026,1), 1000m), (M(2026,2), 1000m), (M(2026,3), 1000m)),
+            Asset("X", 0m, new() { new CapitalPoint { At = M(2026,1), CapitalUsd = 0m } },
+                (M(2026,1), 100m), (M(2026,2), -120m), (M(2026,3), -130m)), // value 100 → -20 → -150
+        };
+
+        var pts = StreamAnalyticsService.ComputeNetWorthTrajectory(states, openingBalance: 0m, futureMonths: 3, now: now);
+
+        var projected = pts.Where(p => p.IsProjected).ToList();
+        projected.Should().OnlyContain(p => p.BandLow!.Value <= p.BandHigh!.Value); // never inverted
     }
 }

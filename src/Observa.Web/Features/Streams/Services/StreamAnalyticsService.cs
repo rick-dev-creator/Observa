@@ -718,7 +718,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
 
     // Net-worth trajectory: savings layer = opening + cumulative(income−outcome) − asset capital(T);
     // assets layer = cumulative Performance value. Projection holds assets flat at the last value with a
-    // ±band from historical monthly asset-value volatility; savings continues on its recent trend.
+    // ±band from historical monthly price-return volatility (capital flows stripped out); savings continues on its recent trend.
     internal static IReadOnlyList<CumulativeBalancePointView> ComputeNetWorthTrajectory(
         IReadOnlyList<StreamGrainState> states, decimal openingBalance, int futureMonths, DateTimeOffset now)
     {
@@ -743,6 +743,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
         decimal runIncome = 0, runOutcome = 0, runValue = 0;
         var assetMonthlyPct = new List<decimal>();
         decimal prevValue = 0;
+        decimal prevCapital = 0;
 
         for (var m = firstMonth; m <= anchor; m = m.AddMonths(1))
         {
@@ -756,8 +757,15 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             points.Add(new CumulativeBalancePointView(
                 m.ToString("MMM yy"), m, savings + assets, IsProjected: false, savings, assets));
 
-            if (prevValue != 0 && runValue != 0) assetMonthlyPct.Add((runValue - prevValue) / prevValue);
+            // Volatility for the projection band is the PRICE return only — strip capital flows
+            // (deposits/withdrawals raise value AND capital) so buying more doesn't inflate sigma.
+            if (prevValue != 0)
+            {
+                var priceDelta = (runValue - prevValue) - (capital - prevCapital);
+                assetMonthlyPct.Add(priceDelta / prevValue);
+            }
             prevValue = runValue;
+            prevCapital = capital;
         }
 
         if (futureMonths > 0 && points.Count > 0)
@@ -773,7 +781,7 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
                 var d = anchor.AddMonths(i);
                 var savings = Math.Round(lastSavings + savingsSlope * i, 2);
                 var nw = savings + flatAssets;
-                var band = Math.Round(flatAssets * sigmaMonthly * (decimal)Math.Sqrt(i), 2);
+                var band = Math.Round(Math.Abs(flatAssets) * sigmaMonthly * (decimal)Math.Sqrt(i), 2);
                 points.Add(new CumulativeBalancePointView(
                     d.ToString("MMM yy"), d, nw, IsProjected: true, savings, flatAssets,
                     BandLow: Math.Round(nw - band, 2), BandHigh: Math.Round(nw + band, 2)));
