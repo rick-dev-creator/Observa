@@ -21,15 +21,22 @@ public sealed class YearOverYearTests
         var now = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
         var states = new List<StreamGrainState>
         {
-            Stream(Direction.Income, (2024, 100m), (2025, 115m), (2026, 60m)),
-            Stream(Direction.Outcome, (2024, 0m), (2025, 0m), (2026, 0m)),
+            Stream(Direction.Income,      (2024, 100m), (2025, 115m), (2026, 60m)),
+            Stream(Direction.Outcome,     (2024,  20m), (2025,  15m), (2026, 10m)),
+            Stream(Direction.Performance, (2024, 999m)),
         };
 
         var rows = StreamAnalyticsService.ComputeYearOverYear(states, now);
 
         rows.Should().HaveCount(3);
-        rows[0].Should().BeEquivalentTo(new { Year = 2024, NetUsd = 100m, ChangePctVsPrior = (decimal?)null, IsPartial = false });
-        rows[1].ChangePctVsPrior.Should().BeApproximately(0.15m, 0.0001m);
+        rows[0].Year.Should().Be(2024);
+        rows[0].NetUsd.Should().Be(80m);
+        rows[0].ChangePctVsPrior.Should().BeNull();
+        rows[0].IsPartial.Should().BeFalse();
+        rows[1].NetUsd.Should().Be(100m);
+        rows[1].ChangePctVsPrior.Should().BeApproximately(0.25m, 0.0001m);
+        rows[2].Year.Should().Be(2026);
+        rows[2].NetUsd.Should().Be(50m);
         rows[2].IsPartial.Should().BeTrue();
     }
 }
