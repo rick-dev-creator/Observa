@@ -11,17 +11,6 @@
                          SeriesType="SeriesType.Area"
                          XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
                          YValue="@(p => p.VolatileBalance)" />
-        @if (Data.Any(p => p.BandHigh is not null))
-        {
-            <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Proy. alta"
-                             SeriesType="SeriesType.Line"
-                             XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
-                             YValue="@(p => p.BandHigh ?? p.Balance)" />
-            <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Proy. baja"
-                             SeriesType="SeriesType.Line"
-                             XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
-                             YValue="@(p => p.BandLow ?? p.Balance)" />
-        }
     </ApexChart>
 </div>
 
@@ -44,16 +33,15 @@
                 Zoom = new Zoom { Enabled = false },
                 Stacked = true,
             },
-            Colors = new List<string> { "#38bdf8", "#34d399", "#34d399", "#34d399" },
+            Colors = new List<string> { "#38bdf8", "#34d399" },
             Stroke = new Stroke
             {
-                Curve = new List<Curve> { Curve.Smooth, Curve.Smooth, Curve.Straight, Curve.Straight },
-                Width = new List<double> { 2.5, 2.5, 1, 1 },
-                DashArray = new List<double> { 0, 0, 4, 4 },
+                Curve = new List<Curve> { Curve.Smooth, Curve.Smooth },
+                Width = new List<double> { 2.5, 2.5 },
             },
             Fill = new Fill
             {
-                Type = new List<FillType> { FillType.Gradient, FillType.Gradient, FillType.Solid, FillType.Solid },
+                Type = new List<FillType> { FillType.Gradient, FillType.Gradient },
                 Gradient = new FillGradient
                 {
                     ShadeIntensity = 1,
