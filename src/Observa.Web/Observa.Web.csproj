@@ -26,9 +26,9 @@
       <PrivateAssets>contentfiles;build</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
-    <PackageReference Include="Microsoft.Orleans.Server" Version="9.2.1" />
-    <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="9.2.1" />
-    <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Orleans.Server" Version="10.1.0" />
+    <PackageReference Include="Microsoft.Orleans.Persistence.AdoNet" Version="10.1.0" />
+    <PackageReference Include="Microsoft.Orleans.Reminders.AdoNet" Version="10.1.0" />
     <PackageReference Include="Npgsql" Version="9.0.4" />
   </ItemGroup>
 
