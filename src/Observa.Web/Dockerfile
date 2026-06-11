@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ----- build -----
-FROM mcr.microsoft.com/dotnet/sdk:10.0.100 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.301 AS build
 WORKDIR /src
 
 # Node is required by the Tailwind MSBuild target in Observa.Web.csproj
