@@ -488,3 +488,6 @@ src/Observa.Web/wwwroot/app.css
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local agent/session files
+.claude/
