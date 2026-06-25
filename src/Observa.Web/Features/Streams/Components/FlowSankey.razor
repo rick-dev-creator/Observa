@@ -3,7 +3,7 @@
 
 @* Money flow for a month: green = income in, sky = what you keep (savings/invest), amber = spend.
    Filled ribbons, semantic colour — reads without a legend. *@
-<svg viewBox="0 0 480 300" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Monthly money flow">
+<svg viewBox="0 0 900 330" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Monthly money flow">
     @((MarkupString)_svg)
 </svg>
 
@@ -37,11 +37,11 @@
         var uTotal = (double)Uses.Sum(u => u.Amount);
         if (total <= 0 || uTotal <= 0) return "";
 
-        const double W = 480, H = 300, top = 40, botPad = 16;
+        const double W = 900, H = 330, top = 46, botPad = 22;
         const double plotH = H - top - botPad;
-        const double Lx = 124, Rx = W - 124, Hw = 15;
+        const double Lx = 212, Rx = W - 212, Hw = 18;
         const double Hx = (Lx + Rx) / 2 - Hw / 2;
-        const double gapS = 7, gapU = 6;
+        const double gapS = 14, gapU = 16;
 
         var sScale = (plotH - (Sources.Count - 1) * gapS) / total;
         var sT = new double[Sources.Count];
@@ -66,22 +66,21 @@
         var sb = new StringBuilder();
 
         // direction headers
-        sb.Append($"<text x='{F(Lx - 14)}' y='{F(top - 18)}' text-anchor='end' font-size='11' letter-spacing='1.5' fill='{Green}' font-weight='700'>ENTRA ▸</text>");
-        sb.Append($"<text x='{F(Rx + 14)}' y='{F(top - 18)}' text-anchor='start' font-size='11' letter-spacing='1.5' fill='{Amber}' font-weight='700'>▸ SALE</text>");
+        sb.Append($"<text x='{F(Lx - 16)}' y='{F(top - 20)}' text-anchor='end' font-size='12' letter-spacing='1.5' fill='{Green}' font-weight='700'>ENTRA ▸</text>");
+        sb.Append($"<text x='{F(Rx + 16)}' y='{F(top - 20)}' text-anchor='start' font-size='12' letter-spacing='1.5' fill='{Amber}' font-weight='700'>▸ SALE</text>");
 
-        // income ribbons + nodes
+        // income ribbons + nodes (single-line label: name + amount)
         for (var i = 0; i < Sources.Count; i++)
         {
             sb.Append(Ribbon(Lx, sT[i], sB[i], Hx, sT[i], sB[i], Green, 0.42));
             sb.Append($"<rect x='{F(Lx - 5)}' y='{F(sT[i])}' width='5' height='{F(sB[i] - sT[i])}' rx='2' fill='{Green}'/>");
             var my = (sT[i] + sB[i]) / 2;
-            sb.Append($"<text x='{F(Lx - 13)}' y='{F(my - 1)}' text-anchor='end' font-size='12.5' fill='{Ink}'>{Esc(Sources[i].Name)}</text>");
-            sb.Append($"<text x='{F(Lx - 13)}' y='{F(my + 13)}' text-anchor='end' font-size='11' fill='{Muted}'>{Fmt(Sources[i].Amount)}</text>");
+            sb.Append($"<text x='{F(Lx - 14)}' y='{F(my + 4)}' text-anchor='end' font-size='13' fill='{Ink}'>{Esc(Sources[i].Name)} <tspan fill='{Muted}' font-size='11'>{Fmt(Sources[i].Amount)}</tspan></text>");
         }
 
         // hub
-        sb.Append($"<rect x='{F(Hx)}' y='{F(top)}' width='{F(Hw)}' height='{F(plotH)}' rx='3.5' fill='{Ink}' opacity='0.85'/>");
-        sb.Append($"<text x='{F(Hx + Hw / 2)}' y='{F(top - 8)}' text-anchor='middle' font-size='11.5' fill='{Ink}' font-weight='700'>{Fmt(Sources.Sum(s => s.Amount))}</text>");
+        sb.Append($"<rect x='{F(Hx)}' y='{F(top)}' width='{F(Hw)}' height='{F(plotH)}' rx='4' fill='{Ink}' opacity='0.85'/>");
+        sb.Append($"<text x='{F(Hx + Hw / 2)}' y='{F(top - 8)}' text-anchor='middle' font-size='12' fill='{Ink}' font-weight='700'>{Fmt(Sources.Sum(s => s.Amount))}</text>");
 
         // outflow ribbons + nodes
         var expIdx = 0;
@@ -94,8 +93,7 @@
             sb.Append(Ribbon(Hx + Hw, uT[i], uB[i], Rx, uT[i], uB[i], fill, op));
             sb.Append($"<rect x='{F(Rx)}' y='{F(uT[i])}' width='5' height='{F(uB[i] - uT[i])}' rx='2' fill='{fill}'/>");
             var my = (uT[i] + uB[i]) / 2;
-            sb.Append($"<text x='{F(Rx + 13)}' y='{F(my - 1)}' font-size='12.5' fill='{(keep ? Sky : Ink)}' font-weight='{(keep ? 660 : 400)}'>{Esc(Uses[i].Name)}</text>");
-            sb.Append($"<text x='{F(Rx + 13)}' y='{F(my + 13)}' font-size='11' fill='{Muted}'>{Fmt(Uses[i].Amount)}</text>");
+            sb.Append($"<text x='{F(Rx + 14)}' y='{F(my + 4)}' font-size='13' fill='{(keep ? Sky : Ink)}' font-weight='{(keep ? 660 : 400)}'>{Esc(Uses[i].Name)} <tspan fill='{Muted}' font-size='11' font-weight='400'>{Fmt(Uses[i].Amount)}</tspan></text>");
         }
 
         return sb.ToString();

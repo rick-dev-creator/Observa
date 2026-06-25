@@ -126,56 +126,33 @@ else
             </details>
         </section>
 
-        <!-- FLOW + PORTFOLIO -->
-        <section class="grid md:grid-cols-2 gap-4 mb-4">
-            <div class="border border-zinc-800 rounded-xl p-5">
-                <h2 class="text-sm font-semibold text-zinc-200">Flujo @(_flowMonthLabel is null ? "del mes" : $"· {_flowMonthLabel}")</h2>
-                <p class="text-xs text-zinc-500 mb-2">Dónde entra y a dónde sale tu dinero.</p>
-                @if (_flowSources.Count > 0)
-                {
-                    <FlowSankey Sources="_flowSources" Uses="_flowUses" />
-                }
-                else
-                {
-                    <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin movimientos en el periodo.</div>
-                }
-            </div>
-            <div class="border border-zinc-800 rounded-xl p-5">
-                <h2 class="text-sm font-semibold text-zinc-200">Portafolio <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 align-middle">volátil</span></h2>
-                <p class="text-xs text-zinc-500 mb-2">Composición · marcado a precio en vivo.</p>
-                @if (_holdings.Any(h => !h.IsClosed && h.ValueUsd > 0))
-                {
-                    <AllocationDonut Holdings="_holdings" />
-                }
-                else
-                {
-                    <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin holdings registrados.</div>
-                }
-            </div>
+        <!-- FLOW (full width) -->
+        <section class="border border-zinc-800 rounded-xl p-5 mb-4">
+            <h2 class="text-sm font-semibold text-zinc-200">Flujo @(_flowMonthLabel is null ? "del mes" : $"· {_flowMonthLabel}")</h2>
+            <p class="text-xs text-zinc-500 mb-2">Dónde entra y a dónde sale tu dinero.</p>
+            @if (_flowSources.Count > 0)
+            {
+                <FlowSankey Sources="_flowSources" Uses="_flowUses" />
+            }
+            else
+            {
+                <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin movimientos en el periodo.</div>
+            }
         </section>
 
-        <!-- SPEND BY CATEGORY -->
-        @if (_spend.Count > 0)
-        {
-            <section class="border border-zinc-800 rounded-xl p-5 mb-4">
-                <h2 class="text-sm font-semibold text-zinc-200">Gasto por categoría</h2>
-                <p class="text-xs text-zinc-500 mb-3">@(_flowMonthLabel ?? "Periodo reciente").</p>
-                <div class="space-y-2.5">
-                    @{ var maxSpend = _spend.Max(s => s.Amount); }
-                    @for (var i = 0; i < _spend.Count; i++)
-                    {
-                        var s = _spend[i];
-                        <div class="flex items-center gap-3 text-sm">
-                            <span class="w-28 shrink-0 text-zinc-200 truncate">@s.Name</span>
-                            <span class="flex-1 h-2.5 rounded bg-zinc-800 overflow-hidden">
-                                <span class="block h-full rounded" style="width:@(SpendWidth(s.Amount, maxSpend))%;background:#fbbf24;opacity:@SpendOpacity(i)"></span>
-                            </span>
-                            <span class="w-16 text-right text-zinc-400 tabular-nums">@FormatMoney(s.Amount)</span>
-                        </div>
-                    }
-                </div>
-            </section>
-        }
+        <!-- PORTFOLIO -->
+        <section class="border border-zinc-800 rounded-xl p-5 mb-4">
+            <h2 class="text-sm font-semibold text-zinc-200">Portafolio <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 align-middle">volátil</span></h2>
+            <p class="text-xs text-zinc-500 mb-2">Composición · marcado a precio en vivo.</p>
+            @if (_holdings.Any(h => !h.IsClosed && h.ValueUsd > 0))
+            {
+                <div class="max-w-2xl"><AllocationDonut Holdings="_holdings" /></div>
+            }
+            else
+            {
+                <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin holdings registrados.</div>
+            }
+        </section>
 
         <!-- STREAMS DETAIL (demoted) -->
         <details class="border border-zinc-800 rounded-xl overflow-hidden">
@@ -237,7 +214,6 @@ else
 
     private List<FlowSankey.FlowNode> _flowSources = [];
     private List<FlowSankey.FlowNode> _flowUses = [];
-    private List<(string Name, decimal Amount)> _spend = [];
     private string? _flowMonthLabel;
 
     private IReadOnlyCollection<Guid>? _filter;
@@ -304,7 +280,6 @@ else
 
         _flowSources = [];
         _flowUses = [];
-        _spend = [];
         _flowMonthLabel = null;
         if (pick is not { } chosen) return;
 
@@ -315,8 +290,6 @@ else
             .OrderByDescending(r => r.Amount).Select(r => (r.StreamName, r.Amount)).ToList();
         var expenseRows = picked.Where(r => r.Direction == Direction.Outcome && r.Amount > 0)
             .OrderByDescending(r => r.Amount).Select(r => (r.StreamName, r.Amount)).ToList();
-
-        _spend = expenseRows; // full list feeds the category bars
 
         _flowSources = FoldTop(incomeRows, 6).Select(x => new FlowSankey.FlowNode(x.Name, x.Amount)).ToList();
 
@@ -366,11 +339,6 @@ else
         _activeTab == idx
             ? "px-4 py-2 text-sm font-medium text-zinc-100 border-b-2 border-zinc-100 -mb-px"
             : "px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 border-b-2 border-transparent -mb-px";
-
-    private static int SpendWidth(decimal amount, decimal max) =>
-        max <= 0 ? 0 : (int)Math.Round(amount / max * 100);
-
-    private static string SpendOpacity(int i) => Math.Max(1.0 - i * 0.13, 0.3).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string FormatMoney(decimal v, bool signed = false)
     {
