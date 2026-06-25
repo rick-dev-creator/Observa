@@ -1,0 +1,119 @@
+@using System.Text
+@using System.Globalization
+@using Observa.Features.Streams.Services.Views
+
+@* Net-worth projection: solid history, dashed projected median, amber uncertainty cone.
+   Fed directly by GetNetWorthTrajectoryAsync — the band edges (BandLow/High) are real
+   price-return volatility, so nothing here is invented. *@
+<svg viewBox="0 0 840 312" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Net worth projection">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CumulativeBalancePointView> Data { get; set; } = [];
+
+    private string _svg = "";
+
+    private const string Ink = "#e4e4e7", Muted = "#71717a", Line = "#27272a", Sky = "#38bdf8", Amber = "#fbbf24";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private static string F(double x) => x.ToString("0.#", Ci);
+
+    private static string FmtK(double v)
+    {
+        var a = Math.Abs(v);
+        return a >= 1000
+            ? "$" + Math.Round(v / 1000).ToString(Ci) + "k"
+            : "$" + Math.Round(v).ToString(Ci);
+    }
+
+    private string Build()
+    {
+        var p = Data;
+        var n = p.Count;
+        if (n < 2) return "";
+
+        const double X0 = 48, X1 = 826, Y0 = 18, Y1 = 282;
+        double MX(int i) => X0 + (double)i / (n - 1) * (X1 - X0);
+
+        var vals = new List<double>(n * 3);
+        foreach (var d in p)
+        {
+            vals.Add((double)d.Balance);
+            if (d.BandLow is { } lo) vals.Add((double)lo);
+            if (d.BandHigh is { } hi) vals.Add((double)hi);
+        }
+        double vMin = vals.Min(), vMax = vals.Max();
+        var pad = (vMax - vMin) * 0.08;
+        if (pad <= 0) pad = Math.Abs(vMax) * 0.1 + 1;
+        vMin -= pad; vMax += pad;
+        double MY(double v) => Y1 - (v - vMin) / (vMax - vMin) * (Y1 - Y0);
+
+        var lastHist = 0;
+        for (var i = 0; i < n; i++) if (!p[i].IsProjected) lastHist = i;
+
+        var sb = new StringBuilder();
+
+        // horizontal gridlines + $ labels
+        for (var g = 0; g <= 4; g++)
+        {
+            var v = vMin + (vMax - vMin) * g / 4.0;
+            var y = MY(v);
+            sb.Append($"<line x1='{F(X0)}' y1='{F(y)}' x2='{F(X1)}' y2='{F(y)}' stroke='{Line}' stroke-width='1'/>");
+            sb.Append($"<text x='{F(X0 - 8)}' y='{F(y + 4)}' text-anchor='end' font-size='11' fill='{Muted}'>{FmtK(v)}</text>");
+        }
+
+        // x labels
+        var stepLbl = Math.Max(1, n / 6);
+        for (var i = 0; i < n; i += stepLbl)
+            sb.Append($"<text x='{F(MX(i))}' y='{F(Y1 + 20)}' text-anchor='middle' font-size='10.5' fill='{Muted}'>{p[i].Label}</text>");
+
+        // uncertainty cone (projected segment)
+        if (lastHist < n - 1)
+        {
+            var band = new StringBuilder();
+            for (var i = lastHist; i < n; i++)
+            {
+                var hi = i == lastHist ? (double)p[i].Balance : (double)(p[i].BandHigh ?? p[i].Balance);
+                band.Append(i == lastHist ? "M" : "L").Append($" {F(MX(i))} {F(MY(hi))} ");
+            }
+            for (var i = n - 1; i >= lastHist; i--)
+            {
+                var lo = i == lastHist ? (double)p[i].Balance : (double)(p[i].BandLow ?? p[i].Balance);
+                band.Append($"L {F(MX(i))} {F(MY(lo))} ");
+            }
+            sb.Append($"<path d='{band}Z' fill='{Amber}' opacity='0.15'/>");
+        }
+
+        // history (solid)
+        var hp = new StringBuilder();
+        for (var i = 0; i <= lastHist; i++)
+            hp.Append(i == 0 ? "M" : "L").Append($" {F(MX(i))} {F(MY((double)p[i].Balance))} ");
+        sb.Append($"<path d='{hp}' fill='none' stroke='{Sky}' stroke-width='2.4'/>");
+
+        // projection median (dashed)
+        if (lastHist < n - 1)
+        {
+            var mp = new StringBuilder();
+            for (var i = lastHist; i < n; i++)
+                mp.Append(i == lastHist ? "M" : "L").Append($" {F(MX(i))} {F(MY((double)p[i].Balance))} ");
+            sb.Append($"<path d='{mp}' fill='none' stroke='{Ink}' stroke-width='2' stroke-dasharray='5 4' opacity='0.8'/>");
+        }
+
+        // HOY marker
+        var hx = MX(lastHist);
+        sb.Append($"<line x1='{F(hx)}' y1='{F(Y0)}' x2='{F(hx)}' y2='{F(Y1)}' stroke='{Muted}' stroke-width='1' stroke-dasharray='2 3' opacity='0.6'/>");
+        sb.Append($"<circle cx='{F(hx)}' cy='{F(MY((double)p[lastHist].Balance))}' r='4' fill='{Sky}'/>");
+        sb.Append($"<text x='{F(hx)}' y='{F(Y0 - 4)}' text-anchor='middle' font-size='10' fill='{Muted}' font-weight='600'>HOY</text>");
+
+        // end labels
+        var last = p[n - 1];
+        sb.Append($"<text x='{F(MX(n - 1))}' y='{F(MY((double)last.Balance) - 6)}' text-anchor='end' font-size='11' fill='{Ink}' font-weight='700'>{FmtK((double)last.Balance)}</text>");
+        if (last.BandHigh is { } bh)
+            sb.Append($"<text x='{F(MX(n - 1))}' y='{F(MY((double)bh) - 6)}' text-anchor='end' font-size='10.5' fill='{Amber}'>{FmtK((double)bh)}</text>");
+
+        return sb.ToString();
+    }
+}

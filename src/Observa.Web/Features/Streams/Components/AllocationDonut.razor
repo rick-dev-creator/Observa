@@ -1,0 +1,77 @@
+@using System.Text
+@using System.Globalization
+@using Observa.Features.Streams.Services.Views
+
+@* Portfolio composition + unrealized return. Sized to the holdings' market value. *@
+<svg viewBox="0 0 460 224" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Portfolio allocation">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<AssetHoldingView> Holdings { get; set; } = [];
+
+    private string _svg = "";
+
+    private const string Ink = "#e4e4e7", Muted = "#71717a", Green = "#34d399", Rose = "#fb7185";
+    private static readonly string[] Palette = { "#fbbf24", "#a78bfa", "#38bdf8", "#34d399", "#f472b6", "#71717a" };
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.##", Ci);
+    private static string Fmt(decimal v) => "$" + Math.Round(v).ToString("N0", Ci);
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        var items = Holdings.Where(h => !h.IsClosed && h.ValueUsd > 0)
+            .OrderByDescending(h => h.ValueUsd).ToList();
+        if (items.Count == 0) return "";
+
+        var totalDec = items.Sum(h => h.ValueUsd);
+        var total = (double)totalDec;
+        var ret = items.Sum(h => h.ReturnUsd);
+        var capital = items.Sum(h => h.CapitalUsd);
+        var pct = capital != 0 ? ret / capital : 0m;
+
+        const double cx = 110, cy = 110, r = 78, rin = 50;
+        var sb = new StringBuilder();
+        var a0 = -Math.PI / 2;
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var frac = (double)items[i].ValueUsd / total;
+            var a1 = a0 + frac * Math.PI * 2;
+            var x0 = cx + r * Math.Cos(a0); var y0 = cy + r * Math.Sin(a0);
+            var x1 = cx + r * Math.Cos(a1); var y1 = cy + r * Math.Sin(a1);
+            var xi1 = cx + rin * Math.Cos(a1); var yi1 = cy + rin * Math.Sin(a1);
+            var xi0 = cx + rin * Math.Cos(a0); var yi0 = cy + rin * Math.Sin(a0);
+            var big = (a1 - a0) > Math.PI ? 1 : 0;
+            var col = Palette[i % Palette.Length];
+            sb.Append($"<path d='M {F(x0)} {F(y0)} A {F(r)} {F(r)} 0 {big} 1 {F(x1)} {F(y1)} "
+                    + $"L {F(xi1)} {F(yi1)} A {F(rin)} {F(rin)} 0 {big} 0 {F(xi0)} {F(yi0)} Z' fill='{col}' opacity='0.92'/>");
+            a0 = a1;
+        }
+
+        var retColor = ret >= 0 ? Green : Rose;
+        var sign = ret >= 0 ? "+" : "−";
+        sb.Append($"<text x='{F(cx)}' y='{F(cy - 4)}' text-anchor='middle' font-size='20' font-weight='680' fill='{Ink}'>{Fmt(totalDec)}</text>");
+        sb.Append($"<text x='{F(cx)}' y='{F(cy + 15)}' text-anchor='middle' font-size='11.5' fill='{retColor}' font-weight='600'>{sign}{Fmt(Math.Abs(ret))} · {sign}{Math.Round(Math.Abs(pct) * 100).ToString(Ci)}%</text>");
+
+        // legend
+        const double lx = 232;
+        var ly = 46.0;
+        for (var i = 0; i < items.Count; i++)
+        {
+            var p = (double)items[i].ValueUsd / total * 100;
+            var col = Palette[i % Palette.Length];
+            sb.Append($"<rect x='{F(lx)}' y='{F(ly - 9)}' width='11' height='11' rx='3' fill='{col}'/>");
+            sb.Append($"<text x='{F(lx + 18)}' y='{F(ly)}' font-size='12.5' fill='{Ink}'>{Esc(items[i].Symbol)}</text>");
+            sb.Append($"<text x='446' y='{F(ly)}' text-anchor='end' font-size='12.5' fill='{Muted}'>{Math.Round(p).ToString(Ci)}% · {Fmt(items[i].ValueUsd)}</text>");
+            ly += 30;
+        }
+
+        return sb.ToString();
+    }
+
+    private static string Esc(string s) =>
+        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+}

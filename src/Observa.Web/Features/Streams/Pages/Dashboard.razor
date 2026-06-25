@@ -1,5 +1,6 @@
 @page "/"
 @rendermode InteractiveServer
+@using Observa.Features.Streams.Enums
 @using Observa.Features.Streams.Services.Views
 @using Observa.Features.Streams.Grains
 @inject StreamAnalyticsService Analytics
@@ -25,21 +26,9 @@ else if (!_hasData)
 else
 {
     <div class="flex gap-1 mb-6 border-b border-zinc-800" role="tablist">
-        <button type="button" role="tab"
-                class="@TabClass(0)"
-                @onclick="@(() => _activeTab = 0)">
-            Overview
-        </button>
-        <button type="button" role="tab"
-                class="@TabClass(1)"
-                @onclick="@(() => _activeTab = 1)">
-            What if…
-        </button>
-        <button type="button" role="tab"
-                class="@TabClass(2)"
-                @onclick="@(() => _activeTab = 2)">
-            Assets
-        </button>
+        <button type="button" role="tab" class="@TabClass(0)" @onclick="@(() => _activeTab = 0)">Overview</button>
+        <button type="button" role="tab" class="@TabClass(1)" @onclick="@(() => _activeTab = 1)">What if…</button>
+        <button type="button" role="tab" class="@TabClass(2)" @onclick="@(() => _activeTab = 2)">Assets</button>
     </div>
 
     @if (_activeTab == 1)
@@ -52,193 +41,146 @@ else
     }
     else
     {
-    <StreamFilter Streams="_allStreams" SelectionChanged="OnFilterChangedAsync" />
+        <div class="mb-4">
+            <StreamFilter Streams="_allStreams" SelectionChanged="OnFilterChangedAsync" />
+        </div>
 
-    <YearOverYearStrip Rows="_yoy" />
-
-    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
-        <div class="flex flex-wrap items-end justify-between gap-3 mb-2">
+        <!-- HERO -->
+        <section class="border border-zinc-800 rounded-xl p-6 mb-4 flex flex-wrap items-center justify-between gap-6">
             <div>
-                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Total earned</h2>
-                <p class="text-xs text-zinc-500">All income to date — what you'd have if you'd never spent a cent. An eye-opener, not your real balance.</p>
-            </div>
-            @if (_grossEarned.Count > 0)
-            {
-                <div class="text-right">
-                    <div class="text-2xl font-semibold text-zinc-300 tabular-nums">@FormatMoney(_grossEarned[^1].Value)</div>
-                    <div class="text-xs text-zinc-500">earned since @_grossEarned[0].Date.ToString("MMM yyyy")</div>
+                <p class="text-xs uppercase tracking-wide text-zinc-500 font-semibold">Patrimonio neto · hoy</p>
+                <div class="text-4xl sm:text-5xl font-semibold tabular-nums mt-1 @NetColor(NetWorth)">@FormatMoney(NetWorth)</div>
+                <div class="flex gap-5 text-sm mt-2">
+                    <span><span class="@DeltaColor(MonthNet) tabular-nums">@FormatMoney(MonthNet, signed: true)</span> <span class="text-zinc-500">este mes</span></span>
+                    <span><span class="@DeltaColor(Ytd) tabular-nums">@FormatMoney(Ytd, signed: true)</span> <span class="text-zinc-500">este año</span></span>
                 </div>
-            }
-        </div>
-        <TrajectoryLineChart @key="@($"ge-{_filterKey}")" Points="_grossEarned" Name="Earned" ColorHex="#a1a1aa" />
-    </section>
-
-    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
-        <div class="flex flex-wrap items-end justify-between gap-3 mb-2">
-            <div>
-                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Real net worth</h2>
-                <p class="text-xs text-zinc-500">Opening balance + income − expenses, only from when your expenses are fully tracked.</p>
             </div>
-            @if (_realNetWorth.Count > 0)
-            {
-                <div class="text-right">
-                    <div class="text-2xl font-semibold text-emerald-300 tabular-nums">@FormatMoney(_realNetWorth[^1].Value)</div>
-                    <div class="text-xs text-zinc-500">real net worth today</div>
-                </div>
-            }
-        </div>
-        @if (_realNetWorth.Count > 0)
-        {
-            <TrajectoryLineChart @key="@($"rn-{_filterKey}-{_expenseTrackingStart?.Ticks}")" Points="_realNetWorth" Name="Net worth" ColorHex="#34d399" />
-        }
-        else
-        {
-            <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-400 text-sm">
-                Set <span class="text-zinc-200">Expenses tracked from</span> below to draw your real net-worth line.
-            </div>
-        }
-        <div class="mt-3 flex flex-wrap gap-x-8 gap-y-3 border-t border-zinc-800 pt-3">
-            <label class="flex flex-col gap-1 text-xs">
-                <span class="text-zinc-500">Opening balance</span>
-                <input type="number" step="100" value="@_openingBalance" @onchange="OnOpeningBalanceChangedAsync"
-                       class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
-                <span class="text-[11px] text-zinc-600">your real net worth on the tracking date</span>
-            </label>
-            <label class="flex flex-col gap-1 text-xs">
-                <span class="text-zinc-500">Expenses tracked from</span>
-                <input type="date" value="@(_expenseTrackingStart?.ToString("yyyy-MM-dd"))" @onchange="OnExpenseTrackingStartChangedAsync"
-                       class="w-40 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
-                <span class="text-[11px] text-zinc-600">when your expenses became complete</span>
-            </label>
-        </div>
-    </section>
-
-    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
-        <div class="mb-3">
-            <h2 class="text-sm uppercase tracking-wide text-zinc-400">Projection · at current trend</h2>
-            <p class="text-xs text-zinc-500">If your recent monthly trend holds — what you'd earn (gross) and save (net of expenses).</p>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            @foreach (var r in _projection)
-            {
-                <div class="border border-zinc-800 rounded-lg p-4 bg-zinc-900/40">
-                    <div class="text-xs text-zinc-500">@r.Label</div>
-                    <div class="text-sm text-emerald-400 tabular-nums mt-1">Earn @FormatMoney(r.EarnedUsd, signed: true)</div>
-                    <div class="text-sm text-zinc-200 tabular-nums">Save @FormatMoney(r.NetUsd, signed: true)</div>
-                </div>
-            }
-        </div>
-    </section>
-
-    <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
-        <EarnSpendChart @key="@($"es-{_grain}")" Data="_earnSpend" Granularity="_grain" GranularityChanged="OnGrainChangedAsync" />
-    </section>
-
-    <section class="border border-zinc-800 rounded p-5 sm:p-6 mb-6">
-        <p class="text-xs uppercase tracking-wide text-zinc-500 mb-2">This month so far</p>
-        <div class="flex items-baseline gap-3 flex-wrap">
-            <AnimatedNumber Target="@_summary!.NetMTD" Signed="true"
-                            CssClass="@($"text-3xl sm:text-4xl font-semibold {NetColor(_summary.NetMTD)}")" />
-            @if (_summary.Delta is not null && _summary.PreviousMonthSamePoint != 0)
-            {
-                <span class="text-sm text-zinc-400">
-                    <span class="@DeltaColor(_summary.Delta.Value)">@DeltaArrow(_summary.Delta.Value) @FormatMoney(Math.Abs(_summary.Delta.Value))</span>
-                    <span class="text-zinc-600">vs last month</span>
-                </span>
-            }
-        </div>
-        <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-            <div>
-                <p class="text-xs text-zinc-500">Income</p>
-                <p class="text-emerald-400 tabular-nums">+@FormatMoney(_summary.IncomeMTD)</p>
-            </div>
-            <div>
-                <p class="text-xs text-zinc-500">Outcome</p>
-                <p class="text-rose-400 tabular-nums">−@FormatMoney(_summary.OutcomeMTD)</p>
-            </div>
-            <div>
-                <p class="text-xs text-zinc-500">Days remaining</p>
-                <p class="text-zinc-300 tabular-nums">@(_summary.DaysInMonth - _summary.DaysIntoMonth) days</p>
-            </div>
-        </div>
-        @if (_summary.OnTrackEom is not null)
-        {
-            <p class="mt-4 text-sm text-zinc-400">
-                On track for <span class="text-zinc-200 tabular-nums">~@FormatMoney(_summary.OnTrackEom.Value, signed: true)</span> by month end.
-            </p>
-        }
-    </section>
-
-    @if (_retrospective is not null)
-    {
-        <section class="border border-zinc-800 rounded p-5 sm:p-6 mb-6">
-            <p class="text-xs uppercase tracking-wide text-zinc-500 mb-4">Where you've been</p>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div class="flex gap-7 text-right">
                 <div>
-                    <p class="text-xs text-zinc-500">Year to date</p>
-                    <p class="text-2xl font-semibold tabular-nums @NetColor(_retrospective.YearToDateNet)">
-                        @FormatMoney(_retrospective.YearToDateNet, signed: true)
-                    </p>
-                    <p class="text-xs text-zinc-500 mt-1 tabular-nums">
-                        <span class="text-emerald-400">+@FormatMoney(_retrospective.YearToDateIncome)</span>
-                        <span class="text-zinc-600">/</span>
-                        <span class="text-rose-400">−@FormatMoney(_retrospective.YearToDateOutcome)</span>
-                    </p>
+                    <div class="text-2xl font-semibold tabular-nums text-zinc-100">@FormatMoney(Cash)</div>
+                    <div class="text-xs text-zinc-500 mt-1"><span class="text-sky-400">●</span> Caja · estable</div>
                 </div>
-                @if (_retrospective.YoyDelta is { } yoy && _retrospective.PreviousYearSamePointNet is { } prev)
+                <div>
+                    <div class="text-2xl font-semibold tabular-nums text-zinc-100">@FormatMoney(Invested)</div>
+                    <div class="text-xs text-zinc-500 mt-1"><span class="text-amber-400">●</span> Invertido · volátil</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- KPI STRIP -->
+        <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div class="border border-zinc-800 rounded-lg p-4">
+                <div class="text-xs text-zinc-500">Ingreso · este mes</div>
+                <div class="text-2xl font-semibold tabular-nums text-emerald-400 mt-1">@FormatMoney(_summary?.IncomeMTD ?? 0m)</div>
+            </div>
+            <div class="border border-zinc-800 rounded-lg p-4">
+                <div class="text-xs text-zinc-500">Gasto · este mes</div>
+                <div class="text-2xl font-semibold tabular-nums text-zinc-100 mt-1">@FormatMoney(_summary?.OutcomeMTD ?? 0m)</div>
+            </div>
+            <div class="border border-zinc-800 rounded-lg p-4">
+                <div class="text-xs text-zinc-500">Flujo neto · este mes</div>
+                <div class="text-2xl font-semibold tabular-nums @DeltaColor(MonthNet) mt-1">@FormatMoney(MonthNet, signed: true)</div>
+            </div>
+            <div class="border border-zinc-800 rounded-lg p-4">
+                <div class="text-xs text-zinc-500">Invertido</div>
+                <div class="text-2xl font-semibold tabular-nums text-zinc-100 mt-1">@FormatMoney(HoldingsValue)</div>
+                <div class="text-xs mt-0.5 tabular-nums @DeltaColor(HoldingsReturn)">@FormatMoney(HoldingsReturn, signed: true) no realizado</div>
+            </div>
+        </section>
+
+        <!-- PROJECTION CONE -->
+        <section class="border border-zinc-800 rounded-xl p-5 mb-4">
+            <div class="mb-1">
+                <h2 class="text-sm font-semibold text-zinc-200">Proyección de patrimonio</h2>
+                <p class="text-xs text-zinc-500">Historia real (línea), proyección esperada (punteada) y el rango por volatilidad del portafolio (banda).</p>
+            </div>
+            @if (_trajectory.Count >= 2)
+            {
+                <NetWorthConeChart Data="_trajectory" />
+                <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-zinc-500 mt-3">
+                    <span><span class="text-sky-400">━</span> Historia real</span>
+                    <span><span class="text-zinc-300">┈</span> Proyección esperada</span>
+                    <span><span class="text-amber-400">▨</span> Rango por volatilidad</span>
+                </div>
+            }
+            else
+            {
+                <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">
+                    Aún no hay suficiente historia para proyectar.
+                </div>
+            }
+            <details class="mt-3 border-t border-zinc-800 pt-3">
+                <summary class="text-xs text-zinc-500 cursor-pointer select-none">Ajustes de saldo inicial</summary>
+                <div class="mt-3 flex flex-wrap gap-x-8 gap-y-3">
+                    <label class="flex flex-col gap-1 text-xs">
+                        <span class="text-zinc-500">Opening balance</span>
+                        <input type="number" step="100" value="@_openingBalance" @onchange="OnOpeningBalanceChangedAsync"
+                               class="w-36 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
+                    </label>
+                    <label class="flex flex-col gap-1 text-xs">
+                        <span class="text-zinc-500">Expenses tracked from</span>
+                        <input type="date" value="@(_expenseTrackingStart?.ToString("yyyy-MM-dd"))" @onchange="OnExpenseTrackingStartChangedAsync"
+                               class="w-40 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100 tabular-nums" />
+                    </label>
+                </div>
+            </details>
+        </section>
+
+        <!-- FLOW + PORTFOLIO -->
+        <section class="grid md:grid-cols-2 gap-4 mb-4">
+            <div class="border border-zinc-800 rounded-xl p-5">
+                <h2 class="text-sm font-semibold text-zinc-200">Flujo @(_flowMonthLabel is null ? "del mes" : $"· {_flowMonthLabel}")</h2>
+                <p class="text-xs text-zinc-500 mb-2">Dónde entra y a dónde sale tu dinero.</p>
+                @if (_flowSources.Count > 0)
                 {
-                    <div>
-                        <p class="text-xs text-zinc-500">vs last year</p>
-                        <p class="text-2xl font-semibold tabular-nums @DeltaColor(yoy)">
-                            @DeltaArrow(yoy) @FormatMoney(Math.Abs(yoy))
-                        </p>
-                        <p class="text-xs text-zinc-500 mt-1 tabular-nums">
-                            prev YTD: @FormatMoney(prev, signed: true)
-                        </p>
-                    </div>
+                    <FlowSankey Sources="_flowSources" Uses="_flowUses" />
                 }
-                @if (_retrospective.BestMonth is { } best)
+                else
                 {
-                    <div>
-                        <p class="text-xs text-zinc-500">Best month</p>
-                        <p class="text-2xl font-semibold tabular-nums text-emerald-400">
-                            @FormatMoney(best.Net, signed: true)
-                        </p>
-                        <p class="text-xs text-zinc-500 mt-1">@MonthLabel(best.Year, best.Month)</p>
-                    </div>
+                    <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin movimientos en el periodo.</div>
                 }
-                @if (_retrospective.WorstMonth is { } worst)
+            </div>
+            <div class="border border-zinc-800 rounded-xl p-5">
+                <h2 class="text-sm font-semibold text-zinc-200">Portafolio <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 align-middle">volátil</span></h2>
+                <p class="text-xs text-zinc-500 mb-2">Composición · marcado a precio en vivo.</p>
+                @if (_holdings.Any(h => !h.IsClosed && h.ValueUsd > 0))
                 {
-                    <div>
-                        <p class="text-xs text-zinc-500">Worst month</p>
-                        <p class="text-2xl font-semibold tabular-nums text-rose-400">
-                            @FormatMoney(worst.Net, signed: true)
-                        </p>
-                        <p class="text-xs text-zinc-500 mt-1">@MonthLabel(worst.Year, worst.Month)</p>
-                    </div>
+                    <AllocationDonut Holdings="_holdings" />
+                }
+                else
+                {
+                    <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin holdings registrados.</div>
                 }
             </div>
         </section>
-    }
 
-    @if (_historyByStream.Count > 0)
-    {
-        <section class="border border-zinc-800 rounded p-4 sm:p-5 mb-6">
-            <div class="flex items-baseline justify-between mb-4 flex-wrap gap-2">
-                <h2 class="text-sm uppercase tracking-wide text-zinc-400">Monthly contribution — last 12 months</h2>
-                <p class="text-xs text-zinc-500">Stacked by stream · income above zero, outcome below</p>
-            </div>
-            <MonthlyStreamBars @key="@($"m-{_filterKey}")" Data="_historyByStream" />
-        </section>
-    }
+        <!-- SPEND BY CATEGORY -->
+        @if (_spend.Count > 0)
+        {
+            <section class="border border-zinc-800 rounded-xl p-5 mb-4">
+                <h2 class="text-sm font-semibold text-zinc-200">Gasto por categoría</h2>
+                <p class="text-xs text-zinc-500 mb-3">@(_flowMonthLabel ?? "Periodo reciente").</p>
+                <div class="space-y-2.5">
+                    @{ var maxSpend = _spend.Max(s => s.Amount); }
+                    @for (var i = 0; i < _spend.Count; i++)
+                    {
+                        var s = _spend[i];
+                        <div class="flex items-center gap-3 text-sm">
+                            <span class="w-28 shrink-0 text-zinc-200 truncate">@s.Name</span>
+                            <span class="flex-1 h-2.5 rounded bg-zinc-800 overflow-hidden">
+                                <span class="block h-full rounded" style="width:@(SpendWidth(s.Amount, maxSpend))%;background:#fbbf24;opacity:@SpendOpacity(i)"></span>
+                            </span>
+                            <span class="w-16 text-right text-zinc-400 tabular-nums">@FormatMoney(s.Amount)</span>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
 
-    <section class="border border-zinc-800 rounded overflow-hidden">
-        <div class="px-4 sm:px-5 py-3 border-b border-zinc-800">
-            <h2 class="text-sm uppercase tracking-wide text-zinc-400">Streams</h2>
-        </div>
-
-        <div class="hidden md:block">
-            <table class="w-full text-sm">
+        <!-- STREAMS DETAIL (demoted) -->
+        <details class="border border-zinc-800 rounded-xl overflow-hidden">
+            <summary class="px-5 py-3 text-sm uppercase tracking-wide text-zinc-400 cursor-pointer select-none">Streams · detalle</summary>
+            <table class="w-full text-sm border-t border-zinc-800">
                 <thead class="bg-zinc-900/50 text-zinc-500 text-xs uppercase tracking-wide">
                     <tr>
                         <th class="text-left px-4 py-2 font-medium">Stream</th>
@@ -246,7 +188,6 @@ else
                         <th class="text-right px-4 py-2 font-medium">Last month</th>
                         <th class="text-right px-4 py-2 font-medium">Avg</th>
                         <th class="text-left px-4 py-2 font-medium w-32">Trend</th>
-                        <th class="text-left px-4 py-2 font-medium w-32">Sparkline</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-zinc-800">
@@ -263,95 +204,21 @@ else
                                 {
                                     <span class="@ValueColor(t.Direction, lm)">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
                                 }
-                                else
-                                {
-                                    <span class="text-zinc-600">—</span>
-                                }
+                                else { <span class="text-zinc-600">—</span> }
                             </td>
                             <td class="px-4 py-2 text-right tabular-nums">
                                 @if (t.RecentAverage is { } avg && (avg > 0 || (avg != 0 && t.Direction == Direction.Performance)))
                                 {
                                     <span class="text-zinc-300">@FormatMoney(avg, signed: t.Direction == Direction.Performance)</span>
                                 }
-                                else
-                                {
-                                    <span class="text-zinc-600">—</span>
-                                }
+                                else { <span class="text-zinc-600">—</span> }
                             </td>
-                            <td class="px-4 py-2">
-                                <TrendBadge Label="@t.TrendLabel" Slope="@t.Slope" />
-                                @if (!string.IsNullOrEmpty(t.TrendDetail))
-                                {
-                                    <div class="text-xs text-zinc-500 mt-0.5">@t.TrendDetail</div>
-                                }
-                            </td>
-                            <td class="px-4 py-2">
-                                <div class="h-6 w-28">
-                                    <Sparkline Data="t.Sparkline"
-                                               StrokeColor="@SparkColor(t.Direction)" />
-                                </div>
-                            </td>
+                            <td class="px-4 py-2"><TrendBadge Label="@t.TrendLabel" Slope="@t.Slope" /></td>
                         </tr>
                     }
                 </tbody>
             </table>
-        </div>
-
-        <ul class="md:hidden divide-y divide-zinc-800">
-            @foreach (var t in _trends)
-            {
-                <li>
-                    <a href="streams/@t.Id" class="block px-4 py-3 hover:bg-zinc-900/50">
-                        <div class="flex items-start justify-between gap-3 mb-2">
-                            <div class="min-w-0">
-                                <p class="text-zinc-100 font-medium truncate">@t.Name</p>
-                                <p class="text-xs text-zinc-500">@t.Direction · @t.Category</p>
-                            </div>
-                            <TrendBadge Label="@t.TrendLabel" Slope="@t.Slope" />
-                        </div>
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="text-xs space-y-0.5 min-w-0">
-                                <div class="flex gap-2">
-                                    <span class="text-zinc-500">Expected:</span>
-                                    <span class="text-zinc-300 tabular-nums">@(t.ExpectedAmount is null ? "—" : FormatMoney(t.ExpectedAmount.Value))</span>
-                                </div>
-                                <div class="flex gap-2">
-                                    <span class="text-zinc-500">Last month:</span>
-                                    @if (t.LastMonthAmount is { } lm && (lm > 0 || (lm != 0 && t.Direction == Direction.Performance)))
-                                    {
-                                        <span class="@ValueColor(t.Direction, lm) tabular-nums">@FormatMoney(lm, signed: t.Direction == Direction.Performance)</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-zinc-600">—</span>
-                                    }
-                                </div>
-                                <div class="flex gap-2">
-                                    <span class="text-zinc-500">Avg:</span>
-                                    @if (t.RecentAverage is { } avg && (avg > 0 || (avg != 0 && t.Direction == Direction.Performance)))
-                                    {
-                                        <span class="text-zinc-300 tabular-nums">@FormatMoney(avg, signed: t.Direction == Direction.Performance)</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="text-zinc-600">—</span>
-                                    }
-                                </div>
-                                @if (!string.IsNullOrEmpty(t.TrendDetail))
-                                {
-                                    <p class="text-zinc-500">@t.TrendDetail</p>
-                                }
-                            </div>
-                            <div class="h-7 w-24 shrink-0">
-                                <Sparkline Data="t.Sparkline"
-                                           StrokeColor="@(t.Direction == Direction.Income ? "#10b981" : "#f43f5e")" />
-                            </div>
-                        </div>
-                    </a>
-                </li>
-            }
-        </ul>
-    </section>
+        </details>
     }
 }
 
@@ -359,24 +226,32 @@ else
     private bool _loading = true;
     private bool _hasData;
     private int _activeTab = 0;
+
     private MonthSummaryView? _summary;
     private RetrospectiveView? _retrospective;
-    private IReadOnlyList<MonthlyAggregateView> _history = [];
     private IReadOnlyList<StreamTrendView> _trends = [];
-    private IReadOnlyList<YearlyAggregateView> _yearly = [];
     private IReadOnlyList<StreamSummaryView> _allStreams = [];
-    private IReadOnlyList<MonthlyStreamPointView> _historyByStream = [];
     private IReadOnlyList<AssetHoldingView> _holdings = [];
+    private IReadOnlyList<CumulativeBalancePointView> _trajectory = [];
+    private IReadOnlyList<MonthlyStreamPointView> _monthByStream = [];
+
+    private List<FlowSankey.FlowNode> _flowSources = [];
+    private List<FlowSankey.FlowNode> _flowUses = [];
+    private List<(string Name, decimal Amount)> _spend = [];
+    private string? _flowMonthLabel;
+
     private IReadOnlyCollection<Guid>? _filter;
-    private string _filterKey = "init";
-    private IReadOnlyList<YearOverYearView> _yoy = [];
-    private IReadOnlyList<TrajectoryPointView> _grossEarned = [];
-    private IReadOnlyList<TrajectoryPointView> _realNetWorth = [];
-    private IReadOnlyList<EarningsProjectionRowView> _projection = [];
-    private IReadOnlyList<EarnSpendPointView> _earnSpend = [];
-    private EarnSpendGranularity _grain = EarnSpendGranularity.Month;
     private decimal _openingBalance;
     private DateTimeOffset? _expenseTrackingStart;
+
+    private CumulativeBalancePointView? Hero => _trajectory.LastOrDefault(p => !p.IsProjected);
+    private decimal NetWorth => Hero?.Balance ?? 0m;
+    private decimal Cash => Hero?.StableBalance ?? 0m;
+    private decimal Invested => Hero?.VolatileBalance ?? 0m;
+    private decimal Ytd => _retrospective?.YearToDateNet ?? 0m;
+    private decimal MonthNet => _summary?.NetMTD ?? 0m;
+    private decimal HoldingsValue => _holdings.Where(h => !h.IsClosed).Sum(h => h.ValueUsd);
+    private decimal HoldingsReturn => _holdings.Where(h => !h.IsClosed).Sum(h => h.ReturnUsd);
 
     protected override async Task OnInitializedAsync()
     {
@@ -393,27 +268,89 @@ else
     private async Task LoadAnalyticsAsync()
     {
         _summary = await Analytics.GetCurrentMonthAsync(CancellationToken.None, _filter);
-        _history = await Analytics.GetMonthlyHistoryAsync(12, CancellationToken.None, _filter);
-        _trends = await Analytics.GetStreamTrendsAsync(12, CancellationToken.None, _filter);
         _retrospective = await Analytics.GetRetrospectiveAsync(CancellationToken.None, _filter);
-        _yearly = await Analytics.GetYearlyHistoryAsync(CancellationToken.None, _filter);
-        _historyByStream = await Analytics.GetMonthlyHistoryByStreamAsync(12, CancellationToken.None, _filter);
+        _trends = await Analytics.GetStreamTrendsAsync(12, CancellationToken.None, _filter);
         _holdings = await Analytics.GetAssetHoldingsAsync(CancellationToken.None);
-        _yoy = await Analytics.GetYearOverYearAsync(CancellationToken.None, _filter);
-        _grossEarned = await Analytics.GetGrossEarnedAsync(CancellationToken.None, _filter);
-        _realNetWorth = await Analytics.GetRealNetWorthAsync(CancellationToken.None, _filter);
-        _projection = await Analytics.GetEarningsProjectionAsync(CancellationToken.None, _filter);
+        _trajectory = await Analytics.GetNetWorthTrajectoryAsync(12, CancellationToken.None, _filter);
+        _monthByStream = await Analytics.GetMonthlyHistoryByStreamAsync(3, CancellationToken.None, _filter);
+
         var settings = Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key);
         _openingBalance = await settings.GetOpeningBalanceAsync();
         _expenseTrackingStart = await settings.GetExpenseTrackingStartAsync();
-        _earnSpend = await Analytics.GetEarnSpendAsync(_grain, EarnSpendPeriods(_grain), CancellationToken.None, _filter);
+
+        BuildFlow();
+    }
+
+    // Picks the most recent month that has movement (preferring a complete month over the partial current one)
+    // and splits it into income sources, expense uses, and a "savings → invest" node.
+    private void BuildFlow()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var months = _monthByStream.Select(r => (r.Year, r.Month)).Distinct()
+            .OrderByDescending(m => m.Year).ThenByDescending(m => m.Month).ToList();
+
+        (int Y, int M)? pick = null, fallback = null;
+        foreach (var (y, mo) in months)
+        {
+            var rows = _monthByStream.Where(r => r.Year == y && r.Month == mo).ToList();
+            var inc = rows.Where(r => r.Direction == Direction.Income).Sum(r => r.Amount);
+            var outc = rows.Where(r => r.Direction == Direction.Outcome).Sum(r => r.Amount);
+            if (inc <= 0 && outc <= 0) continue;
+            var isCurrent = y == now.Year && mo == now.Month;
+            if (!isCurrent) { pick = (y, mo); break; }
+            fallback ??= (y, mo);
+        }
+        pick ??= fallback;
+
+        _flowSources = [];
+        _flowUses = [];
+        _spend = [];
+        _flowMonthLabel = null;
+        if (pick is not { } chosen) return;
+
+        var picked = _monthByStream.Where(r => r.Year == chosen.Y && r.Month == chosen.M).ToList();
+        _flowMonthLabel = new DateTimeOffset(chosen.Y, chosen.M, 1, 0, 0, 0, TimeSpan.Zero).ToString("MMM yyyy");
+
+        _flowSources = picked.Where(r => r.Direction == Direction.Income && r.Amount > 0)
+            .OrderByDescending(r => r.Amount)
+            .Select(r => new FlowSankey.FlowNode(r.StreamName, r.Amount))
+            .ToList();
+
+        var expenses = picked.Where(r => r.Direction == Direction.Outcome && r.Amount > 0)
+            .OrderByDescending(r => r.Amount).ToList();
+        _spend = expenses.Select(r => (r.StreamName, r.Amount)).ToList();
+
+        var savings = _flowSources.Sum(s => s.Amount) - expenses.Sum(r => r.Amount);
+        if (savings > 0)
+            _flowUses.Add(new FlowSankey.FlowNode("Ahorro / Inversión", savings, Keep: true));
+        _flowUses.AddRange(expenses.Select(r => new FlowSankey.FlowNode(r.StreamName, r.Amount)));
     }
 
     private async Task OnFilterChangedAsync(IReadOnlyCollection<Guid> selection)
     {
         _filter = selection;
         await LoadAnalyticsAsync();
-        _filterKey = $"{selection.Count}-{string.Join(",", selection.OrderBy(g => g))}";
+    }
+
+    private async Task OnOpeningBalanceChangedAsync(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(e.Value?.ToString(), out var v))
+        {
+            await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetOpeningBalanceAsync(v);
+            _openingBalance = v;
+            _trajectory = await Analytics.GetNetWorthTrajectoryAsync(12, CancellationToken.None, _filter);
+        }
+    }
+
+    private async Task OnExpenseTrackingStartChangedAsync(ChangeEventArgs e)
+    {
+        DateTimeOffset? start = DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM-dd",
+            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d)
+            ? new DateTimeOffset(d.Year, d.Month, d.Day, 0, 0, 0, TimeSpan.Zero)
+            : null;
+        await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetExpenseTrackingStartAsync(start);
+        _expenseTrackingStart = start;
+        _trajectory = await Analytics.GetNetWorthTrajectoryAsync(12, CancellationToken.None, _filter);
     }
 
     private string TabClass(int idx) =>
@@ -421,8 +358,10 @@ else
             ? "px-4 py-2 text-sm font-medium text-zinc-100 border-b-2 border-zinc-100 -mb-px"
             : "px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 border-b-2 border-transparent -mb-px";
 
-    private static string MonthLabel(int year, int month) =>
-        $"{System.Globalization.CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedMonthName(month)} {year}";
+    private static int SpendWidth(decimal amount, decimal max) =>
+        max <= 0 ? 0 : (int)Math.Round(amount / max * 100);
+
+    private static string SpendOpacity(int i) => Math.Max(1.0 - i * 0.13, 0.3).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string FormatMoney(decimal v, bool signed = false)
     {
@@ -437,11 +376,9 @@ else
     {
         > 0 => "text-emerald-400",
         < 0 => "text-rose-400",
-        _ => "text-zinc-200",
+        _ => "text-zinc-100",
     };
 
-    // A stream's per-value colour. Income is always green, Outcome always red; Performance
-    // is signed, so it colours by the value (gain green / loss red).
     private static string ValueColor(Direction d, decimal v) => d switch
     {
         Direction.Income => "text-emerald-400",
@@ -450,60 +387,10 @@ else
         _ => "text-zinc-300",
     };
 
-    // Sparkline stroke per direction: Performance uses the volatile amber theme.
-    private static string SparkColor(Direction d) => d switch
-    {
-        Direction.Income => "#10b981",
-        Direction.Outcome => "#f43f5e",
-        Direction.Performance => "#f59e0b",
-        _ => "#a1a1aa",
-    };
-
     private static string DeltaColor(decimal d) => d switch
     {
         > 0 => "text-emerald-400",
         < 0 => "text-rose-400",
         _ => "text-zinc-400",
     };
-
-    private static string DeltaArrow(decimal d) => d switch
-    {
-        > 0 => "↑",
-        < 0 => "↓",
-        _ => "·",
-    };
-
-    private static int EarnSpendPeriods(EarnSpendGranularity g) => g switch
-    {
-        EarnSpendGranularity.Day => 30, EarnSpendGranularity.Week => 12,
-        EarnSpendGranularity.Month => 12, _ => 5,
-    };
-
-    private async Task OnGrainChangedAsync(EarnSpendGranularity g)
-    {
-        _grain = g;
-        _earnSpend = await Analytics.GetEarnSpendAsync(g, EarnSpendPeriods(g), CancellationToken.None, _filter);
-    }
-
-    private async Task OnOpeningBalanceChangedAsync(ChangeEventArgs e)
-    {
-        if (decimal.TryParse(e.Value?.ToString(), out var v))
-        {
-            await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetOpeningBalanceAsync(v);
-            _openingBalance = v;
-            _realNetWorth = await Analytics.GetRealNetWorthAsync(CancellationToken.None, _filter);
-        }
-    }
-
-    private async Task OnExpenseTrackingStartChangedAsync(ChangeEventArgs e)
-    {
-        DateTimeOffset? start = DateTime.TryParseExact(e.Value?.ToString(), "yyyy-MM-dd",
-            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d)
-            ? new DateTimeOffset(d.Year, d.Month, d.Day, 0, 0, 0, TimeSpan.Zero)
-            : null;
-        await Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key).SetExpenseTrackingStartAsync(start);
-        _expenseTrackingStart = start;
-        _realNetWorth = await Analytics.GetRealNetWorthAsync(CancellationToken.None, _filter);
-        _projection = await Analytics.GetEarningsProjectionAsync(CancellationToken.None, _filter);
-    }
 }
