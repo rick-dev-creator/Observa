@@ -26,12 +26,111 @@ else
 {
     <div class="flex gap-1 mb-5 border-b border-zinc-800" role="tablist">
         <button type="button" class="@TabClass(0)" @onclick="@(() => _tab = 0)">Overview</button>
-        <button type="button" class="@TabClass(1)" @onclick="@(() => _tab = 1)">What if…</button>
-        <button type="button" class="@TabClass(2)" @onclick="@(() => _tab = 2)">Assets</button>
+        <button type="button" class="@TabClass(1)" @onclick="@(() => _tab = 1)">Estable</button>
+        <button type="button" class="@TabClass(2)" @onclick="@(() => _tab = 2)">Volátil</button>
     </div>
 
-    @if (_tab == 1) { <WhatIfTab Trends="_trends" /> }
-    else if (_tab == 2) { <AssetHoldingsTab Holdings="_holdings" /> }
+    @if (_tab == 1)
+    {
+        <!-- ESTABLE: motor de cash-flow -->
+        <section class="border border-zinc-800 rounded-2xl p-5">
+            <div class="flex items-baseline gap-3">
+                <span class="text-[15px] font-semibold">Esperado vs real</span>
+                <span class="text-xs text-zinc-500">· ¿llegó lo que la regla predijo?</span>
+                <span class="ml-auto text-[13px] text-zinc-500">desvío del mes <b class="@DeltaColor(_devTotal)">@Signed(_devTotal)</b></span>
+            </div>
+            <p class="text-[11.5px] text-zinc-500 mt-2 mb-1">Barra = lo <b class="text-zinc-100">real</b> del último mes; la marca = lo <b class="text-zinc-100">esperado</b> (la regla calendarizada). Verde/ámbar = entra/sale; rojo = por debajo.</p>
+            @if (_estable.Count > 0) { <ExpectedActualChart Rows="_estable" /> }
+            else { <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin streams recurrentes con monto esperado.</div> }
+        </section>
+
+        <section class="border border-zinc-800 rounded-2xl p-5 mt-4">
+            <div class="flex items-baseline gap-3">
+                <span class="text-[15px] font-semibold">Ingreso por categoría</span>
+                <span class="text-xs text-zinc-500">· composición y tendencia</span>
+            </div>
+            <StackedAreaChart Labels="_estLabels" Series="_estIncomeArea" VbW="1020" VbH="240" />
+            <div class="flex flex-wrap gap-x-3.5 gap-y-1 text-[11.5px] text-zinc-500 mt-2">
+                @foreach (var s in _estIncomeArea) { <span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm" style="background:@s.Color"></i>@s.Name</span> }
+            </div>
+            <p class="text-[11.5px] text-zinc-500 mt-4 mb-1">Predecible vs variable.</p>
+            <SplitBar Segments="_estSplit" VbW="1020" />
+        </section>
+
+        <section class="border border-zinc-800 rounded-2xl p-5 mt-4">
+            <div class="flex items-baseline gap-3">
+                <span class="text-[15px] font-semibold">Calendario de recurrencias</span>
+                <span class="text-xs text-zinc-500">· cuándo se mueve el dinero en el mes</span>
+            </div>
+            <p class="text-[11.5px] text-zinc-500 mt-2 mb-1">Arriba entra, abajo sale; el tamaño es el monto. Sale de la cadencia + ancla de cada stream.</p>
+            @if (_calItems.Count > 0) { <RecurrenceCalendar Items="_calItems" /> }
+            else { <div class="border border-dashed border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">Sin recurrencias calendarizadas.</div> }
+        </section>
+
+        <section class="border border-zinc-800 rounded-2xl p-5 mt-4">
+            <div class="grid md:grid-cols-2 gap-6">
+                <div>
+                    <div class="text-[14px] font-semibold">Entra vs sale</div>
+                    <EarnSpendChart Data="_earnSpend" Granularity="_grain" GranularityChanged="OnGrainChangedAsync" />
+                </div>
+                <div>
+                    <div class="text-[14px] font-semibold">Tasa de ahorro</div>
+                    <p class="text-[11.5px] text-zinc-500 mb-1">% conservado en el tiempo.</p>
+                    <RatioLineChart Values="_estSaveRate" Color="#34d399" VbW="500" VbH="230" />
+                </div>
+            </div>
+        </section>
+    }
+    else if (_tab == 2)
+    {
+        <!-- VOLÁTIL: portafolio -->
+        @if (!_hasPortfolio)
+        {
+            <div class="border border-dashed border-zinc-700 rounded-2xl p-10 text-center text-zinc-400 text-sm">
+                Sin portafolio todavía. Conecta un wallet/exchange (Performance streams) y el lado volátil aparece aquí: valor vs capital, no-realizado por activo y el cono de volatilidad.
+            </div>
+        }
+        else
+        {
+            <section class="border border-zinc-800 rounded-2xl p-5">
+                <div class="flex items-baseline gap-3">
+                    <span class="text-[15px] font-semibold">Valor vs capital invertido</span>
+                    <span class="text-xs text-zinc-500">· mark-to-market vs lo que pusiste (DCA)</span>
+                    <span class="ml-auto text-[13px] text-zinc-500">no realizado <b class="@DeltaColor(_pnlTotal)">@Signed(_pnlTotal)</b></span>
+                </div>
+                <p class="text-[11.5px] text-zinc-500 mt-2 mb-1">Línea <b class="text-sky-400">azul</b> = valor de mercado; <b class="text-zinc-400">punteada</b> = capital (sube con cada compra). La brecha es la ganancia/pérdida no realizada.</p>
+                <ValueVsCostChart Labels="_portfolio.Months" Value="_portfolio.Value" Capital="_portfolio.Capital" />
+            </section>
+
+            <section class="border border-zinc-800 rounded-2xl p-5 mt-4">
+                <div class="grid md:grid-cols-[1.2fr_1fr] gap-6 items-center">
+                    <div>
+                        <div class="text-[14px] font-semibold">No realizado por activo</div>
+                        <p class="text-[11.5px] text-zinc-500 mb-1">Ganancia/pérdida sobre el capital de cada posición.</p>
+                        <PnlBars Items="_pnlBars" />
+                    </div>
+                    <div>
+                        <div class="text-[14px] font-semibold">Composición</div>
+                        <p class="text-[11.5px] text-zinc-500 mb-1">Allocation · marcado a precio en vivo.</p>
+                        <AllocationDonut Holdings="_holdings" />
+                    </div>
+                </div>
+            </section>
+
+            @if (_volCone.Count >= 2)
+            {
+                <section class="border border-zinc-800 rounded-2xl p-5 mt-4">
+                    <div class="flex items-baseline gap-3">
+                        <span class="text-[15px] font-semibold">Proyección del portafolio</span>
+                        <span class="text-xs text-zinc-500">· cono de volatilidad</span>
+                        <span class="ml-auto text-[13px] text-zinc-500">en 18m <b class="text-zinc-100">@F0(_volProj)</b></span>
+                    </div>
+                    <p class="text-[11.5px] text-zinc-500 mt-2 mb-1">Mediana esperada y banda por la volatilidad histórica del portafolio.</p>
+                    <NetWorthConeChart Data="_volCone" />
+                </section>
+            }
+        }
+    }
     else
     {
         <!-- FILTER BAR -->
@@ -176,11 +275,28 @@ else
     // raw loaded data
     private IReadOnlyList<StreamSeriesPointView> _series = [];
     private IReadOnlyList<CumulativeBalancePointView> _trajectory = [];
-    private IReadOnlyList<StreamTrendView> _trends = [];
     private IReadOnlyList<AssetHoldingView> _holdings = [];
     private IReadOnlyList<(int Y, int M)> _months = [];
     private decimal _openingBalance;
     private DateTimeOffset? _expenseTrackingStart;
+
+    // Estable tab
+    private IReadOnlyList<EstableStreamView> _estable = [];
+    private IReadOnlyList<EarnSpendPointView> _earnSpend = [];
+    private EarnSpendGranularity _grain = EarnSpendGranularity.Month;
+    private List<string> _estLabels = [];
+    private List<StackedAreaChart.AreaSeries> _estIncomeArea = [];
+    private List<SplitBar.Seg> _estSplit = [];
+    private List<double> _estSaveRate = [];
+    private List<RecurrenceCalendar.CalItem> _calItems = [];
+    private decimal _devTotal;
+
+    // Volátil tab
+    private PortfolioSeriesView _portfolio = new([], [], []);
+    private List<PnlBars.Bar> _pnlBars = [];
+    private List<CumulativeBalancePointView> _volCone = [];
+    private decimal _pnlTotal, _volProj;
+    private bool _hasPortfolio;
 
     // filter state
     private int _range = 24;
@@ -217,8 +333,10 @@ else
     {
         _series = await Analytics.GetStreamSeriesAsync(30, CancellationToken.None);
         _trajectory = await Analytics.GetNetWorthTrajectoryAsync(18, CancellationToken.None);
-        _trends = await Analytics.GetStreamTrendsAsync(12, CancellationToken.None);
         _holdings = await Analytics.GetAssetHoldingsAsync(CancellationToken.None);
+        _estable = await Analytics.GetEstableStreamsAsync(CancellationToken.None);
+        _portfolio = await Analytics.GetPortfolioSeriesAsync(24, CancellationToken.None);
+        _earnSpend = await Analytics.GetEarnSpendAsync(_grain, 12, CancellationToken.None);
 
         var settings = Grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key);
         _openingBalance = await settings.GetOpeningBalanceAsync();
@@ -237,6 +355,73 @@ else
             .ToDictionary(x => x.cat, x => x.color);
 
         Recompute();
+        BuildEstable();
+        BuildVolatil();
+    }
+
+    private void BuildEstable()
+    {
+        var k = Math.Min(24, _months.Count);
+        var win = _months.Skip(_months.Count - k).ToList();
+        _estLabels = win.Select(m => MonthLabel(m.Y, m.M)).ToList();
+
+        var incCats = _allCats.Where(c => _series.Any(p => p.Category == c && p.Direction == Direction.Income)).ToList();
+        _estIncomeArea = incCats
+            .Select(c => new StackedAreaChart.AreaSeries(c, Color(c),
+                win.Select(m => _series.Where(p => p.Direction == Direction.Income && p.Category == c && p.Year == m.Y && p.Month == m.M).Sum(p => p.Amount)).ToList()))
+            .Where(s => s.Values.Sum() > 0)
+            .OrderByDescending(s => s.Values.Sum())
+            .ToList();
+
+        var lm = win.Count >= 2 ? win[^2] : (win.Count > 0 ? win[^1] : (Y: 0, M: 0));
+        var fixedNow = _series.Where(p => p.Direction == Direction.Income && p.IsFixed && p.Year == lm.Y && p.Month == lm.M).Sum(p => p.Amount);
+        var varNow = _series.Where(p => p.Direction == Direction.Income && !p.IsFixed && p.Year == lm.Y && p.Month == lm.M).Sum(p => p.Amount);
+        _estSplit = new() { new("Predecible", "#38bdf8", fixedNow), new("Variable", "#fbbf24", varNow) };
+
+        _estSaveRate = win.Select(m =>
+        {
+            var inc = (double)_series.Where(p => p.Direction == Direction.Income && p.Year == m.Y && p.Month == m.M).Sum(p => p.Amount);
+            var outc = (double)_series.Where(p => p.Direction == Direction.Outcome && p.Year == m.Y && p.Month == m.M).Sum(p => p.Amount);
+            return inc > 0 ? Math.Clamp((inc - outc) / inc, 0, 1) : 0;
+        }).ToList();
+
+        _calItems = _estable
+            .Select(r => new RecurrenceCalendar.CalItem(r.Name, r.Anchor, r.Expected, r.Direction == Direction.Income, Color(r.Category)))
+            .ToList();
+        _devTotal = _estable.Sum(r => (r.Actual - r.Expected) * (r.Direction == Direction.Income ? 1 : -1));
+    }
+
+    private void BuildVolatil()
+    {
+        _pnlBars = _holdings.Where(h => !h.IsClosed)
+            .OrderByDescending(h => Math.Abs(h.ReturnUsd))
+            .Select(h => new PnlBars.Bar(h.Symbol, h.ReturnUsd))
+            .ToList();
+        _pnlTotal = _holdings.Where(h => !h.IsClosed).Sum(h => h.ReturnUsd);
+        _hasPortfolio = _portfolio.Value.Count > 0 || _holdings.Any(h => !h.IsClosed && h.ValueUsd > 0);
+
+        _volCone = new();
+        if (_portfolio.Value.Count >= 2)
+        {
+            for (var i = 0; i < _portfolio.Value.Count; i++)
+                _volCone.Add(new CumulativeBalancePointView(_portfolio.Months[i], default, _portfolio.Value[i], false, 0, _portfolio.Value[i]));
+            var v0 = (double)_portfolio.Value[^1];
+            for (var t = 1; t <= 18; t++)
+            {
+                var med = v0 * Math.Pow(1.013, t);
+                var sd = v0 * 0.06 * Math.Sqrt(t);
+                _volCone.Add(new CumulativeBalancePointView("", default, (decimal)med, true, 0, (decimal)med,
+                    BandLow: (decimal)(med - sd), BandHigh: (decimal)(med + sd)));
+            }
+            _volProj = _volCone[^1].Balance;
+        }
+    }
+
+    private async Task OnGrainChangedAsync(EarnSpendGranularity g)
+    {
+        _grain = g;
+        var periods = g switch { EarnSpendGranularity.Day => 30, EarnSpendGranularity.Week => 12, EarnSpendGranularity.Month => 12, _ => 5 };
+        _earnSpend = await Analytics.GetEarnSpendAsync(g, periods, CancellationToken.None);
     }
 
     private string Color(string cat) => _catColors.TryGetValue(cat, out var c) ? c : "#94a3b8";
@@ -353,4 +538,6 @@ else
         : "px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200";
 
     private static string F0(decimal v) => "$" + Math.Round(v).ToString("N0", CultureInfo.InvariantCulture);
+    private static string Signed(decimal v) => (v >= 0 ? "+" : "−") + "$" + Math.Round(Math.Abs(v)).ToString("N0", CultureInfo.InvariantCulture);
+    private static string DeltaColor(decimal d) => d > 0 ? "text-emerald-400" : d < 0 ? "text-rose-400" : "text-zinc-400";
 }

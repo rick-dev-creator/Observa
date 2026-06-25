@@ -1,0 +1,54 @@
+@using System.Text
+@using System.Globalization
+@using Observa.Features.Streams.Enums
+@using Observa.Features.Streams.Services.Views
+
+@* Expected-vs-actual bullet: bar = actual this month, tick = expected (the calendar rule). *@
+<svg viewBox="0 0 1020 @VbH" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Expected vs actual">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<EstableStreamView> Rows { get; set; } = [];
+
+    private int VbH => Math.Max(60, Rows.Count * 32 + 16);
+    private string _svg = "";
+    private const string Ink = "#e8edf2", Muted = "#8b95a1", Green = "#34d399", Amber = "#fbbf24", Rose = "#fb7185";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.#", Ci);
+    private static string Fmt(decimal v) => "$" + Math.Round(v).ToString("N0", Ci);
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        var n = Rows.Count;
+        if (n == 0) return "";
+        double X0 = 160, X1 = 1020 - 96, top = 8, rh = (double)(VbH - top) / n;
+        var max = (double)Rows.Max(r => Math.Max(r.Expected, r.Actual)) * 1.05;
+        if (max <= 0) max = 1;
+        double MX(decimal v) => X0 + (double)v / max * (X1 - X0);
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < n; i++)
+        {
+            var r = Rows[i];
+            var cy = top + i * rh + rh / 2;
+            var inc = r.Direction == Direction.Income;
+            var under = inc ? r.Actual < r.Expected : r.Actual > r.Expected;
+            var col = under ? Rose : (inc ? Green : Amber);
+
+            sb.Append($"<text x='{F(X0 - 12)}' y='{F(cy + 4)}' text-anchor='end' font-size='12.5' fill='{Ink}'>{Esc(r.Name)}</text>");
+            sb.Append($"<rect x='{F(X0)}' y='{F(cy - 7)}' width='{F(X1 - X0)}' height='14' rx='3' fill='#1b212a'/>");
+            sb.Append($"<rect x='{F(X0)}' y='{F(cy - 7)}' width='{F(Math.Max(0, MX(r.Actual) - X0))}' height='14' rx='3' fill='{col}' opacity='0.9'/>");
+            var ex = MX(r.Expected);
+            sb.Append($"<line x1='{F(ex)}' y1='{F(cy - 11)}' x2='{F(ex)}' y2='{F(cy + 11)}' stroke='#e8edf2' stroke-width='2'/>");
+            var d = r.Actual - r.Expected;
+            var dl = (d >= 0 ? "+" : "−") + Math.Round(Math.Abs(d)).ToString("N0", Ci);
+            sb.Append($"<text x='{F(X1 + 8)}' y='{F(cy + 4)}' font-size='11.5' fill='{(Math.Abs(d) < 1 ? Muted : col)}'>{Fmt(r.Actual)} <tspan fill='{Muted}'>({dl})</tspan></text>");
+        }
+        return sb.ToString();
+    }
+
+    private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+}

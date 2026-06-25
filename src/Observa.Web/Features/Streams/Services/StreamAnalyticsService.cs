@@ -225,6 +225,62 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             StreamImpacts: impacts);
     }
 
+    // Recurring cash-flow streams with their calendar + expected-vs-actual (last complete month).
+    // Powers the Estable tab's expected-vs-real bullet chart and the recurrence calendar.
+    public async Task<IReadOnlyList<EstableStreamView>> GetEstableStreamsAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var now = DateTimeOffset.UtcNow;
+        var thisMonth = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var lastStart = thisMonth.AddMonths(-1);    // last complete month
+
+        var rows = new List<EstableStreamView>();
+        foreach (var s in states)
+        {
+            if (s.Direction == Direction.Performance) continue;
+            if (s.ExpectedAmount is null && s.Schedule is null) continue;
+
+            var cadence = s.Schedule?.Cadence ?? Cadence.Monthly;
+            var anchor = s.Schedule?.Anchor ?? 1;
+            var isFixed = s.Schedule?.Variability == Variability.Fixed;
+            var perMonth = cadence switch { Cadence.Weekly => 4.345m, Cadence.Biweekly => 2.17m, _ => 1m };
+            var expected = Math.Round((s.ExpectedAmount?.Amount ?? 0m) * perMonth, 2);
+            var actual = Math.Round(s.Events.Where(e => e.OccurredAt >= lastStart && e.OccurredAt < thisMonth).Sum(e => e.Amount.Amount), 2);
+
+            rows.Add(new EstableStreamView(s.Id, s.Name, s.Category, s.Direction, isFixed, cadence, anchor, expected, actual));
+        }
+        return rows
+            .OrderByDescending(r => r.Direction == Direction.Income)
+            .ThenByDescending(r => r.Expected)
+            .ToList();
+    }
+
+    // Portfolio market value vs invested capital (DCA), monthly. Empty if no asset holdings exist.
+    public async Task<PortfolioSeriesView> GetPortfolioSeriesAsync(
+        int months, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var assets = states.Where(s => s.Direction == Direction.Performance && s.Binding?.CapitalBasisUsd is not null).ToList();
+
+        var labels = new List<string>();
+        var value = new List<decimal>();
+        var capital = new List<decimal>();
+        if (assets.Count == 0) return new PortfolioSeriesView(labels, value, capital);
+
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        for (var i = months - 1; i >= 0; i--)
+        {
+            var mStart = anchor.AddMonths(-i);
+            var mEnd = mStart.AddMonths(1).AddTicks(-1);
+            labels.Add(mStart.ToString("MMM yy"));
+            value.Add(Math.Round(assets.Sum(a => a.Events.Where(e => e.OccurredAt <= mEnd).Sum(e => e.Amount.Amount)), 2));
+            capital.Add(Math.Round(assets.Sum(a => CapitalAt(a.Binding!, mEnd)), 2));
+        }
+        return new PortfolioSeriesView(labels, value, capital);
+    }
+
     // Per-stream monthly series carrying Category + IsFixed, so the funnel dashboard can pivot by
     // category and by predecible/variable on the client without extra round-trips. Cash flow only.
     public async Task<IReadOnlyList<StreamSeriesPointView>> GetStreamSeriesAsync(

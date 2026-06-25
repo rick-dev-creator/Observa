@@ -1,0 +1,52 @@
+@using System.Text
+@using System.Globalization
+
+@* Diverging horizontal bars: unrealized gain/loss per asset around a zero axis. *@
+<svg viewBox="0 0 560 @VbH" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Unrealized PnL per asset">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    public sealed record Bar(string Label, decimal Pnl);
+
+    [Parameter, EditorRequired] public IReadOnlyList<Bar> Items { get; set; } = [];
+
+    private int VbH => Math.Max(80, Items.Count * 44 + 20);
+    private string _svg = "";
+    private const string Ink = "#e8edf2", Muted = "#8b95a1", Line = "#222a33", Green = "#34d399", Rose = "#fb7185";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.#", Ci);
+    private static string Sgn(decimal v) => (v >= 0 ? "+" : "−") + "$" + Math.Round(Math.Abs(v)).ToString("N0", Ci);
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        var n = Items.Count;
+        if (n == 0) return $"<text x='280' y='{VbH / 2}' text-anchor='middle' font-size='12' fill='{Muted}'>sin posiciones</text>";
+
+        const double W = 560, X0 = 70, mid = W * 0.5, top = 14;
+        double rh = (double)(VbH - top) / n;
+        var max = (double)Items.Max(b => Math.Abs(b.Pnl)) * 1.15;
+        if (max <= 0) max = 1;
+        var half = (W - X0 - 20) / 2;
+        double MX(decimal v) => mid + (double)v / max * half;
+
+        var sb = new StringBuilder();
+        sb.Append($"<line x1='{F(mid)}' y1='{top}' x2='{F(mid)}' y2='{VbH - 6}' stroke='{Line}'/>");
+        for (var i = 0; i < n; i++)
+        {
+            var b = Items[i];
+            var cy = top + i * rh + rh / 2;
+            var pos = b.Pnl >= 0;
+            var col = pos ? Green : Rose;
+            var x = MX(b.Pnl);
+            sb.Append($"<text x='{F(X0 - 12)}' y='{F(cy + 4)}' text-anchor='end' font-size='13' fill='{Ink}' font-weight='600'>{Esc(b.Label)}</text>");
+            sb.Append($"<rect x='{F(Math.Min(mid, x))}' y='{F(cy - 9)}' width='{F(Math.Abs(x - mid))}' height='18' rx='3' fill='{col}' opacity='0.85'/>");
+            sb.Append($"<text x='{F(pos ? x + 6 : x - 6)}' y='{F(cy + 4)}' text-anchor='{(pos ? "start" : "end")}' font-size='11.5' fill='{col}'>{Sgn(b.Pnl)}</text>");
+        }
+        return sb.ToString();
+    }
+
+    private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+}

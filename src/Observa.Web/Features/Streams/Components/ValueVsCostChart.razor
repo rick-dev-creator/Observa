@@ -1,0 +1,66 @@
+@using System.Text
+@using System.Globalization
+
+@* Portfolio market value (solid) vs invested capital/DCA (dashed); the gap = unrealized PnL. *@
+<svg viewBox="0 0 1020 280" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Value vs cost basis">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Labels { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<decimal> Value { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<decimal> Capital { get; set; } = [];
+
+    private string _svg = "";
+    private const string Ink = "#e8edf2", Muted = "#8b95a1", Line = "#222a33", Sky = "#38bdf8", Green = "#34d399", Rose = "#fb7185";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.#", Ci);
+    private static string Fk(double v) { var a = Math.Abs(v); return (v < 0 ? "-" : "") + (a >= 1000 ? "$" + Math.Round(a / 1000).ToString(Ci) + "k" : "$" + Math.Round(a).ToString(Ci)); }
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        var n = Value.Count;
+        if (n < 2) return $"<text x='510' y='140' text-anchor='middle' font-size='12' fill='{Muted}'>conecta un wallet para ver el portafolio</text>";
+
+        const double X0 = 44, X1 = 1020 - 12, Y0 = 14, Y1 = 280 - 26;
+        var all = Value.Concat(Capital).Select(v => (double)v).ToList();
+        double vMin = all.Min() * 0.95, vMax = all.Max() * 1.05;
+        if (vMax <= vMin) vMax = vMin + 1;
+        double MX(int k) => X0 + (double)k / (n - 1) * (X1 - X0);
+        double MY(double v) => Y1 - (v - vMin) / (vMax - vMin) * (Y1 - Y0);
+
+        var sb = new StringBuilder();
+        for (var g = 0; g <= 4; g++)
+        {
+            var v = vMin + (vMax - vMin) * g / 4; var y = MY(v);
+            sb.Append($"<line x1='{F(X0)}' y1='{F(y)}' x2='{F(X1)}' y2='{F(y)}' stroke='{Line}'/>");
+            sb.Append($"<text x='{F(X0 - 8)}' y='{F(y + 4)}' text-anchor='end' font-size='10.5' fill='{Muted}'>{Fk(v)}</text>");
+        }
+        var step = Math.Max(1, n / 5);
+        for (var k = 0; k < n; k += step)
+            sb.Append($"<text x='{F(MX(k))}' y='{F(Y1 + 18)}' text-anchor='middle' font-size='10' fill='{Muted}'>{Esc(Labels[k])}</text>");
+
+        var pnl = Value[n - 1] - Capital[n - 1];
+        // gap fill between value and capital
+        var gap = new StringBuilder($"M {F(MX(0))} {F(MY((double)Value[0]))}");
+        for (var k = 0; k < n; k++) gap.Append($" L {F(MX(k))} {F(MY((double)Value[k]))}");
+        for (var k = n - 1; k >= 0; k--) gap.Append($" L {F(MX(k))} {F(MY((double)Capital[k]))}");
+        sb.Append($"<path d='{gap} Z' fill='{(pnl >= 0 ? Green : Rose)}' opacity='0.12'/>");
+
+        var cap = new StringBuilder($"M {F(MX(0))} {F(MY((double)Capital[0]))}");
+        for (var k = 1; k < n; k++) cap.Append($" L {F(MX(k))} {F(MY((double)Capital[k]))}");
+        sb.Append($"<path d='{cap}' fill='none' stroke='{Muted}' stroke-width='1.8' stroke-dasharray='5 4'/>");
+
+        var val = new StringBuilder($"M {F(MX(0))} {F(MY((double)Value[0]))}");
+        for (var k = 1; k < n; k++) val.Append($" L {F(MX(k))} {F(MY((double)Value[k]))}");
+        sb.Append($"<path d='{val}' fill='none' stroke='{Sky}' stroke-width='2.4'/>");
+
+        sb.Append($"<text x='{F(MX(n - 1))}' y='{F(MY((double)Value[n - 1]) - 6)}' text-anchor='end' font-size='11.5' fill='{Sky}' font-weight='700'>{Fk((double)Value[n - 1])}</text>");
+        sb.Append($"<text x='{F(MX(n - 1))}' y='{F(MY((double)Capital[n - 1]) + 14)}' text-anchor='end' font-size='11' fill='{Muted}'>capital {Fk((double)Capital[n - 1])}</text>");
+        return sb.ToString();
+    }
+
+    private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+}

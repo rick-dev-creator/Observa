@@ -1,0 +1,60 @@
+@using System.Text
+@using System.Globalization
+
+@* Month timeline of recurring movements: income above the axis, outcome below; size = amount. *@
+<svg viewBox="0 0 1020 220" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Recurrence calendar">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    public sealed record CalItem(string Name, int Day, decimal Amount, bool IsIncome, string Color);
+
+    [Parameter, EditorRequired] public IReadOnlyList<CalItem> Items { get; set; } = [];
+
+    private string _svg = "";
+    private const string Ink = "#e8edf2", Muted = "#8b95a1", Line = "#222a33", Green = "#34d399", Rose = "#fb7185";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.#", Ci);
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        if (Items.Count == 0) return "";
+        const double W = 1020, H = 220, X0 = 22, X1 = W - 22, mid = H / 2;
+        double MX(int d) => X0 + (Math.Clamp(d, 1, 31) - 1) / 30.0 * (X1 - X0);
+        var maxA = (double)Items.Max(i => i.Amount);
+        if (maxA <= 0) maxA = 1;
+
+        var sb = new StringBuilder();
+        sb.Append($"<line x1='{F(X0)}' y1='{mid}' x2='{F(X1)}' y2='{mid}' stroke='{Line}'/>");
+        for (var d = 1; d <= 31; d += 5)
+            sb.Append($"<text x='{F(MX(d))}' y='{mid + 4}' text-anchor='middle' font-size='9' fill='{Muted}'>{d}</text>");
+
+        foreach (var grp in Items.GroupBy(i => i.Day))
+        {
+            double yu = mid - 14, yd = mid + 14;
+            foreach (var e in grp.Where(g => g.IsIncome).OrderByDescending(g => g.Amount))
+            {
+                var h = 8 + (double)e.Amount / maxA * 46;
+                var x = MX(e.Day);
+                sb.Append($"<rect x='{F(x - 7)}' y='{F(yu - h)}' width='14' height='{F(h)}' rx='3' fill='{e.Color}' opacity='0.9'/>");
+                sb.Append($"<text x='{F(x)}' y='{F(yu - h - 4)}' text-anchor='middle' font-size='8.5' fill='{Muted}'>{Esc(e.Name)}</text>");
+                yu -= h + 18;
+            }
+            foreach (var e in grp.Where(g => !g.IsIncome).OrderByDescending(g => g.Amount))
+            {
+                var h = 8 + (double)e.Amount / maxA * 46;
+                var x = MX(e.Day);
+                sb.Append($"<rect x='{F(x - 7)}' y='{F(yd)}' width='14' height='{F(h)}' rx='3' fill='{e.Color}' opacity='0.9'/>");
+                sb.Append($"<text x='{F(x)}' y='{F(yd + h + 11)}' text-anchor='middle' font-size='8.5' fill='{Muted}'>{Esc(e.Name)}</text>");
+                yd += h + 20;
+            }
+        }
+        sb.Append($"<text x='{F(X0)}' y='14' font-size='10' fill='{Green}' font-weight='700'>ENTRA ▲</text>");
+        sb.Append($"<text x='{F(X0)}' y='{H - 4}' font-size='10' fill='{Rose}' font-weight='700'>SALE ▼</text>");
+        return sb.ToString();
+    }
+
+    private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+}
