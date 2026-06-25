@@ -225,6 +225,47 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             StreamImpacts: impacts);
     }
 
+    // Per-stream monthly series carrying Category + IsFixed, so the funnel dashboard can pivot by
+    // category and by predecible/variable on the client without extra round-trips. Cash flow only.
+    public async Task<IReadOnlyList<StreamSeriesPointView>> GetStreamSeriesAsync(
+        int months, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        return ComputeStreamSeries(states, months);
+    }
+
+    private static IReadOnlyList<StreamSeriesPointView> ComputeStreamSeries(IReadOnlyList<StreamGrainState> states, int months)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var floor = anchor.AddMonths(-(months - 1));
+
+        var output = new List<StreamSeriesPointView>();
+        foreach (var s in states)
+        {
+            if (s.Direction == Direction.Performance) continue; // funnel: cash flow only
+            var isFixed = s.Schedule?.Variability == Variability.Fixed;
+
+            var buckets = new SortedDictionary<(int Y, int M), decimal>();
+            for (var i = months - 1; i >= 0; i--)
+            {
+                var d = anchor.AddMonths(-i);
+                buckets[(d.Year, d.Month)] = 0m;
+            }
+            foreach (var e in s.Events)
+            {
+                if (e.OccurredAt < floor) continue;
+                var key = (e.OccurredAt.Year, e.OccurredAt.Month);
+                if (!buckets.ContainsKey(key)) continue;
+                buckets[key] += e.Amount.Amount;
+            }
+            foreach (var (key, amount) in buckets)
+                output.Add(new StreamSeriesPointView(
+                    key.Y, key.M, s.Id, s.Name, s.Category, s.Direction, isFixed, Math.Round(amount, 2)));
+        }
+        return output;
+    }
+
     private static IReadOnlyList<MonthlyStreamPointView> ComputeMonthlyHistoryByStream(IReadOnlyList<StreamGrainState> states, int months)
     {
         var now = DateTimeOffset.UtcNow;

@@ -8,7 +8,7 @@
 </svg>
 
 @code {
-    public sealed record FlowNode(string Name, decimal Amount, bool Keep = false);
+    public sealed record FlowNode(string Name, decimal Amount, bool Keep = false, string? Color = null);
 
     [Parameter, EditorRequired] public IReadOnlyList<FlowNode> Sources { get; set; } = [];
     [Parameter, EditorRequired] public IReadOnlyList<FlowNode> Uses { get; set; } = [];
@@ -72,8 +72,9 @@
         // income ribbons + nodes (single-line label: name + amount)
         for (var i = 0; i < Sources.Count; i++)
         {
-            sb.Append(Ribbon(Lx, sT[i], sB[i], Hx, sT[i], sB[i], Green, 0.42));
-            sb.Append($"<rect x='{F(Lx - 5)}' y='{F(sT[i])}' width='5' height='{F(sB[i] - sT[i])}' rx='2' fill='{Green}'/>");
+            var col = Sources[i].Color ?? Green;
+            sb.Append(Ribbon(Lx, sT[i], sB[i], Hx, sT[i], sB[i], col, 0.5));
+            sb.Append($"<rect x='{F(Lx - 5)}' y='{F(sT[i])}' width='5' height='{F(sB[i] - sT[i])}' rx='2' fill='{col}'/>");
             var my = (sT[i] + sB[i]) / 2;
             sb.Append($"<text x='{F(Lx - 14)}' y='{F(my + 4)}' text-anchor='end' font-size='13' fill='{Ink}'>{Esc(Sources[i].Name)} <tspan fill='{Muted}' font-size='11'>{Fmt(Sources[i].Amount)}</tspan></text>");
         }
@@ -87,8 +88,8 @@
         for (var i = 0; i < Uses.Count; i++)
         {
             var keep = Uses[i].Keep;
-            var fill = keep ? Sky : Amber;
-            var op = keep ? 0.62 : Math.Max(0.6 - expIdx * 0.07, 0.3);
+            var fill = keep ? Sky : (Uses[i].Color ?? Amber);
+            var op = keep ? 0.62 : 0.5;
             if (!keep) expIdx++;
             sb.Append(Ribbon(Hx + Hw, uT[i], uB[i], Rx, uT[i], uB[i], fill, op));
             sb.Append($"<rect x='{F(Rx)}' y='{F(uT[i])}' width='5' height='{F(uB[i] - uT[i])}' rx='2' fill='{fill}'/>");
