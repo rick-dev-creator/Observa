@@ -71,7 +71,7 @@ else
             <div class="grid md:grid-cols-2 gap-6">
                 <div>
                     <div class="text-[14px] font-semibold">Entra vs sale</div>
-                    <EarnSpendChart Data="_earnSpend" Granularity="_grain" GranularityChanged="OnGrainChangedAsync" />
+                    <EarnSpendChart @key="@($"es-{_grain}")" Data="_earnSpend" Granularity="_grain" GranularityChanged="OnGrainChangedAsync" />
                 </div>
                 <div>
                     <div class="text-[14px] font-semibold">Tasa de ahorro</div>
