@@ -311,19 +311,28 @@ else
         var picked = _monthByStream.Where(r => r.Year == chosen.Y && r.Month == chosen.M).ToList();
         _flowMonthLabel = new DateTimeOffset(chosen.Y, chosen.M, 1, 0, 0, 0, TimeSpan.Zero).ToString("MMM yyyy");
 
-        _flowSources = picked.Where(r => r.Direction == Direction.Income && r.Amount > 0)
-            .OrderByDescending(r => r.Amount)
-            .Select(r => new FlowSankey.FlowNode(r.StreamName, r.Amount))
-            .ToList();
+        var incomeRows = picked.Where(r => r.Direction == Direction.Income && r.Amount > 0)
+            .OrderByDescending(r => r.Amount).Select(r => (r.StreamName, r.Amount)).ToList();
+        var expenseRows = picked.Where(r => r.Direction == Direction.Outcome && r.Amount > 0)
+            .OrderByDescending(r => r.Amount).Select(r => (r.StreamName, r.Amount)).ToList();
 
-        var expenses = picked.Where(r => r.Direction == Direction.Outcome && r.Amount > 0)
-            .OrderByDescending(r => r.Amount).ToList();
-        _spend = expenses.Select(r => (r.StreamName, r.Amount)).ToList();
+        _spend = expenseRows; // full list feeds the category bars
 
-        var savings = _flowSources.Sum(s => s.Amount) - expenses.Sum(r => r.Amount);
+        _flowSources = FoldTop(incomeRows, 6).Select(x => new FlowSankey.FlowNode(x.Name, x.Amount)).ToList();
+
+        var savings = incomeRows.Sum(r => r.Amount) - expenseRows.Sum(r => r.Amount);
         if (savings > 0)
             _flowUses.Add(new FlowSankey.FlowNode("Ahorro / Inversión", savings, Keep: true));
-        _flowUses.AddRange(expenses.Select(r => new FlowSankey.FlowNode(r.StreamName, r.Amount)));
+        _flowUses.AddRange(FoldTop(expenseRows, 6).Select(x => new FlowSankey.FlowNode(x.Name, x.Amount)));
+    }
+
+    // Keeps a flow chart legible: the top (n-1) items, with the remainder folded into "Otros".
+    private static List<(string Name, decimal Amount)> FoldTop(List<(string Name, decimal Amount)> items, int n)
+    {
+        if (items.Count <= n) return items;
+        var top = items.Take(n - 1).ToList();
+        top.Add(("Otros", items.Skip(n - 1).Sum(x => x.Amount)));
+        return top;
     }
 
     private async Task OnFilterChangedAsync(IReadOnlyCollection<Guid> selection)
