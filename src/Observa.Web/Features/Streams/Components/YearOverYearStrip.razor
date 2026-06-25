@@ -1,0 +1,22 @@
+@using Observa.Features.Streams.Services.Views
+@using System.Globalization
+
+<div class="mb-3 text-xs uppercase tracking-wide text-zinc-500">Net per year</div>
+<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+    @foreach (var r in Rows)
+    {
+        <div class="border border-zinc-800 rounded-lg p-3 bg-zinc-900/40">
+            <div class="text-xs text-zinc-500">@r.Year@(r.IsPartial ? " · YTD" : "")</div>
+            <div class="text-lg font-semibold text-zinc-100 tabular-nums">@Fmt(r.NetUsd)</div>
+            <div class="text-xs tabular-nums @ChgColor(r.ChangePctVsPrior)">@ChgText(r.ChangePctVsPrior)</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<YearOverYearView> Rows { get; set; } = [];
+    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+    private static string Fmt(decimal v) => (v < 0 ? "−" : "+") + "$" + Math.Abs(v).ToString("N0", Inv);
+    private static string ChgText(decimal? p) => p is { } v ? (v >= 0 ? "▲ +" : "▼ ") + (v * 100).ToString("0", Inv) + "%" : "—";
+    private static string ChgColor(decimal? p) => p is { } v ? (v >= 0 ? "text-emerald-400" : "text-rose-400") : "text-zinc-600";
+}

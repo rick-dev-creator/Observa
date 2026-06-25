@@ -1,0 +1,70 @@
+@using System.Text
+@using System.Globalization
+
+@* Stacked area over months. Series stack bottom→top; top outline traces the total. *@
+<svg viewBox="0 0 @VbW @VbH" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Stacked area">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    public sealed record AreaSeries(string Name, string Color, IReadOnlyList<decimal> Values);
+
+    [Parameter, EditorRequired] public IReadOnlyList<string> Labels { get; set; } = [];
+    [Parameter, EditorRequired] public IReadOnlyList<AreaSeries> Series { get; set; } = [];
+    [Parameter] public int VbW { get; set; } = 1020;
+    [Parameter] public int VbH { get; set; } = 270;
+
+    private string _svg = "";
+    private const string Ink = "#e8edf2", Muted = "#8b95a1", Line = "#222a33";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.#", Ci);
+    private static string Fk(double v) { var a = Math.Abs(v); return a >= 1000 ? "$" + Math.Round(v / 1000).ToString(Ci) + "k" : "$" + Math.Round(v).ToString(Ci); }
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        var n = Labels.Count;
+        if (n < 2 || Series.Count == 0)
+            return $"<text x='{VbW / 2}' y='{VbH / 2}' text-anchor='middle' font-size='12' fill='{Muted}'>sin datos para el filtro</text>";
+
+        double X0 = 44, X1 = VbW - 12, Y0 = 12, Y1 = VbH - 26;
+        double MX(int k) => X0 + (double)k / (n - 1) * (X1 - X0);
+
+        var totals = new double[n];
+        for (var k = 0; k < n; k++)
+            foreach (var s in Series) totals[k] += k < s.Values.Count ? (double)s.Values[k] : 0;
+        var vMax = Math.Max(totals.Max(), 1) * 1.08;
+        double MY(double v) => Y1 - v / vMax * (Y1 - Y0);
+
+        var sb = new StringBuilder();
+        for (var g = 0; g <= 4; g++)
+        {
+            var v = vMax * g / 4; var y = MY(v);
+            sb.Append($"<line x1='{F(X0)}' y1='{F(y)}' x2='{F(X1)}' y2='{F(y)}' stroke='{Line}'/>");
+            sb.Append($"<text x='{F(X0 - 8)}' y='{F(y + 4)}' text-anchor='end' font-size='10.5' fill='{Muted}'>{Fk(v)}</text>");
+        }
+        var step = Math.Max(1, n / 5);
+        for (var k = 0; k < n; k += step)
+            sb.Append($"<text x='{F(MX(k))}' y='{F(Y1 + 18)}' text-anchor='middle' font-size='10' fill='{Muted}'>{Esc(Labels[k])}</text>");
+
+        var baseArr = new double[n];
+        foreach (var s in Series)
+        {
+            var top = new double[n];
+            for (var k = 0; k < n; k++) top[k] = baseArr[k] + (k < s.Values.Count ? (double)s.Values[k] : 0);
+            var d = new StringBuilder($"M {F(MX(0))} {F(MY(baseArr[0]))}");
+            for (var k = 0; k < n; k++) d.Append($" L {F(MX(k))} {F(MY(top[k]))}");
+            for (var k = n - 1; k >= 0; k--) d.Append($" L {F(MX(k))} {F(MY(baseArr[k]))}");
+            sb.Append($"<path d='{d} Z' fill='{s.Color}' fill-opacity='0.82' stroke='{s.Color}' stroke-width='0.5'/>");
+            baseArr = top;
+        }
+        var outline = new StringBuilder($"M {F(MX(0))} {F(MY(baseArr[0]))}");
+        for (var k = 1; k < n; k++) outline.Append($" L {F(MX(k))} {F(MY(baseArr[k]))}");
+        sb.Append($"<path d='{outline}' fill='none' stroke='{Ink}' stroke-width='1.2' opacity='0.5'/>");
+
+        return sb.ToString();
+    }
+
+    private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+}

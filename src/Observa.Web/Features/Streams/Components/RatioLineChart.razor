@@ -1,0 +1,57 @@
+@using System.Text
+@using System.Globalization
+
+@* Line + area for a 0..1 ratio series (e.g. savings rate over time). *@
+<svg viewBox="0 0 @VbW @VbH" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Ratio line">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<double> Values { get; set; } = [];
+    [Parameter] public string Color { get; set; } = "#34d399";
+    [Parameter] public int VbW { get; set; } = 440;
+    [Parameter] public int VbH { get; set; } = 220;
+
+    private string _svg = "";
+    private const string Ink = "#e8edf2", Muted = "#8b95a1", Line = "#222a33";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.#", Ci);
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        var n = Values.Count;
+        if (n < 2)
+            return $"<text x='{VbW / 2}' y='{VbH / 2}' text-anchor='middle' font-size='12' fill='{Muted}'>sin datos</text>";
+
+        double X0 = 30, X1 = VbW - 10, Y0 = 12, Y1 = VbH - 24;
+        double MX(int k) => X0 + (double)k / (n - 1) * (X1 - X0);
+        double MY(double v) => Y1 - Math.Clamp(v, 0, 1) * (Y1 - Y0);
+
+        var sb = new StringBuilder();
+        foreach (var g in new[] { 0.0, 0.25, 0.5, 0.75, 1.0 })
+        {
+            var y = MY(g);
+            sb.Append($"<line x1='{F(X0)}' y1='{F(y)}' x2='{F(X1)}' y2='{F(y)}' stroke='{Line}'/>");
+            sb.Append($"<text x='{F(X0 - 6)}' y='{F(y + 4)}' text-anchor='end' font-size='10' fill='{Muted}'>{Math.Round(g * 100)}%</text>");
+        }
+
+        var area = new StringBuilder($"M {F(MX(0))} {F(MY(0))}");
+        var line = new StringBuilder();
+        for (var k = 0; k < n; k++)
+        {
+            line.Append(k == 0 ? "M" : " L").Append($" {F(MX(k))} {F(MY(Values[k]))}");
+            area.Append($" L {F(MX(k))} {F(MY(Values[k]))}");
+        }
+        area.Append($" L {F(MX(n - 1))} {F(MY(0))} Z");
+        sb.Append($"<path d='{area}' fill='{Color}' opacity='0.14'/>");
+        sb.Append($"<path d='{line}' fill='none' stroke='{Color}' stroke-width='2.4'/>");
+
+        var lv = Values[n - 1];
+        sb.Append($"<circle cx='{F(MX(n - 1))}' cy='{F(MY(lv))}' r='4' fill='{Color}'/>");
+        sb.Append($"<text x='{F(MX(n - 1) - 6)}' y='{F(MY(lv) - 8)}' text-anchor='end' font-size='12' font-weight='700' fill='{Ink}'>{Math.Round(lv * 100)}%</text>");
+
+        return sb.ToString();
+    }
+}

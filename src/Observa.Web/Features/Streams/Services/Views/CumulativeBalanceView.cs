@@ -6,4 +6,6 @@ public sealed record CumulativeBalancePointView(
     decimal Balance,            // total = stable + volatile
     bool IsProjected,
     decimal StableBalance = 0m,    // cumulative Income − Outcome
-    decimal VolatileBalance = 0m); // cumulative Performance
+    decimal VolatileBalance = 0m,  // cumulative Performance
+    decimal? BandLow = null,       // net-worth low edge during projection (asset uncertainty)
+    decimal? BandHigh = null);     // net-worth high edge during projection

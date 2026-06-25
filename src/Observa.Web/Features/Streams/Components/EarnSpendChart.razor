@@ -1,0 +1,64 @@
+@using ApexCharts
+@using Observa.Features.Streams.Services.Views
+
+<div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div>
+        <h2 class="text-sm uppercase tracking-wide text-zinc-400">Earn / Spend</h2>
+        <p class="text-xs text-zinc-500">Income vs spend per period · the line is net</p>
+    </div>
+    <div class="inline-flex rounded-md border border-zinc-700 overflow-hidden text-xs">
+        @foreach (var g in _grains)
+        {
+            <button class="px-3 py-1.5 @(g == Granularity ? "bg-zinc-800 text-zinc-100" : "text-zinc-400")"
+                    @onclick="@(() => OnPick(g))">@Label(g)</button>
+        }
+    </div>
+</div>
+<ApexChart TItem="EarnSpendPointView" Options="@_options" Height="260" Debug="false">
+    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Income" SeriesType="SeriesType.Bar"
+                     XValue="@(p => p.Label)" YValue="@(p => p.IncomeUsd)" />
+    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Spend" SeriesType="SeriesType.Bar"
+                     XValue="@(p => p.Label)" YValue="@(p => p.OutcomeUsd)" />
+    <ApexPointSeries TItem="EarnSpendPointView" Items="Data" Name="Net" SeriesType="SeriesType.Line"
+                     XValue="@(p => p.Label)" YValue="@(p => p.NetUsd)" />
+</ApexChart>
+<p class="text-[11px] text-zinc-600 mt-2">@Note(Granularity)</p>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<EarnSpendPointView> Data { get; set; } = [];
+    [Parameter, EditorRequired] public EarnSpendGranularity Granularity { get; set; }
+    [Parameter] public EventCallback<EarnSpendGranularity> GranularityChanged { get; set; }
+
+    private static readonly EarnSpendGranularity[] _grains =
+        { EarnSpendGranularity.Day, EarnSpendGranularity.Week, EarnSpendGranularity.Month, EarnSpendGranularity.Year };
+    private ApexChartOptions<EarnSpendPointView> _options = Build();
+
+    private Task OnPick(EarnSpendGranularity g) => GranularityChanged.InvokeAsync(g);
+
+    private static string Label(EarnSpendGranularity g) => g switch
+    {
+        EarnSpendGranularity.Day => "Day", EarnSpendGranularity.Week => "Week",
+        EarnSpendGranularity.Month => "Month", _ => "Year",
+    };
+    private static string Note(EarnSpendGranularity g) => g switch
+    {
+        EarnSpendGranularity.Day => "Day: BloFin (daily) and one-off spikes (rent) show; salary/Patreon are monthly → a spike on their day.",
+        EarnSpendGranularity.Week => "Week: aggregates the daily view; rent shows as a ~monthly spike.",
+        EarnSpendGranularity.Month => "Month: the natural grain of your main streams.",
+        _ => "Year: annual income vs spend comparison.",
+    };
+
+    private static ApexChartOptions<EarnSpendPointView> Build() => new()
+    {
+        Chart = new Chart { Background = "transparent", ForeColor = "#a1a1aa", Toolbar = new Toolbar { Show = false },
+            FontFamily = "ui-sans-serif, system-ui", Zoom = new Zoom { Enabled = false } },
+        Colors = new List<string> { "#34d399", "#fb7185", "#a1a1aa" },
+        Stroke = new Stroke { Width = new List<double> { 0, 0, 2 }, Curve = new List<Curve> { Curve.Smooth, Curve.Smooth, Curve.Smooth } },
+        PlotOptions = new PlotOptions { Bar = new PlotOptionsBar { ColumnWidth = "60%", BorderRadius = 2 } },
+        Grid = new Grid { BorderColor = "#27272a", StrokeDashArray = 3 },
+        Yaxis = new List<YAxis> { new() { Labels = new YAxisLabels { Formatter = "function(v){return '$'+Math.round(v).toLocaleString('en-US');}" } } },
+        Tooltip = new Tooltip { Theme = Mode.Dark },
+        Legend = new Legend { Show = true, Position = LegendPosition.Top, HorizontalAlign = Align.Left },
+        DataLabels = new DataLabels { Enabled = false },
+    };
+}

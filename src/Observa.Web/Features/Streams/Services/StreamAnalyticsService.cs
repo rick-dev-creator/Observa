@@ -82,20 +82,84 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             .ToList();
     }
 
+    private const int SparklinePoints = 24;          // samples across the holding's recent window
+    private static readonly TimeSpan SparklineWindow = TimeSpan.FromDays(7);
+    private const decimal ClosedValueThreshold = 1m;  // value below this ⇒ position effectively exited
+
     // An asset holding is a stream whose connector binding carries a capital basis (snapshot/asset connector).
-    internal static AssetHoldingView? BuildAssetHolding(StreamGrainState s)
+    // Value at any instant is the cumulative sum of the (signed) Performance events up to that instant, so the
+    // event history *is* the value time-series — 24h / 7d change and the sparkline are derived from it, no extra
+    // storage. Series resolution improves as the hourly snapshot poll accumulates points.
+    internal static AssetHoldingView? BuildAssetHolding(StreamGrainState s, DateTimeOffset? asOf = null)
     {
         if (s.Binding?.CapitalBasisUsd is not { } capital) return null;
-        var value = Math.Round(s.Events.Sum(e => e.Amount.Amount), 2);
-        var ret = Math.Round(value - capital, 2);
-        var pct = capital != 0 ? Math.Round(ret / capital, 4) : (decimal?)null;
-        return new AssetHoldingView(s.Id, s.Name, s.Category, value, Math.Round(capital, 2), ret, pct);
+        var now = asOf ?? DateTimeOffset.UtcNow;
+
+        var events = s.Events.OrderBy(e => e.OccurredAt).ToList();
+        decimal ValueAt(DateTimeOffset t) => events.Where(e => e.OccurredAt <= t).Sum(e => e.Amount.Amount);
+
+        var valueRaw = ValueAt(now);
+        var value = Math.Round(valueRaw, 2);
+        var ret = Math.Round(valueRaw - capital, 2);
+        var pct = capital != 0 ? Math.Round((valueRaw - capital) / capital, 4) : (decimal?)null;
+
+        var v24 = ValueAt(now - TimeSpan.FromHours(24));
+        var change24 = Math.Round(valueRaw - v24, 2);
+        var change24Pct = v24 != 0 ? Math.Round((valueRaw - v24) / v24, 4) : (decimal?)null;
+
+        var v7d = ValueAt(now - SparklineWindow);
+        var change7d = Math.Round(valueRaw - v7d, 2);
+        var change7dPct = v7d != 0 ? Math.Round((valueRaw - v7d) / v7d, 4) : (decimal?)null;
+
+        var sparkline = BuildValueSparkline(events, now, ValueAt);
+        var isClosed = Math.Abs(value) < ClosedValueThreshold && capital >= ClosedValueThreshold;
+
+        return new AssetHoldingView(s.Id, s.Name, s.Category, value, Math.Round(capital, 2), ret, pct,
+            change24, change24Pct, change7d, change7dPct, sparkline, isClosed);
+    }
+
+    // Capital basis at an instant. Uses the recorded history; before the first point capital is 0.
+    // With no history (streams created before capital recording existed) we approximate with current capital.
+    internal static decimal CapitalAt(ConnectorBindingState binding, DateTimeOffset t)
+    {
+        var hist = binding.CapitalHistory;
+        if (hist is null || hist.Count == 0)
+            return binding.CapitalBasisUsd ?? 0m;
+        decimal capital = 0m;
+        foreach (var p in hist.OrderBy(p => p.At))
+        {
+            if (p.At > t) break;
+            capital = p.CapitalUsd;
+        }
+        return capital;
+    }
+
+    // Samples the cumulative value at evenly spaced points from the start of the recent window to now.
+    // Window starts at the first event (so a freshly tracked holding isn't padded with leading zeros),
+    // but never reaches further back than SparklineWindow.
+    private static IReadOnlyList<decimal> BuildValueSparkline(
+        IReadOnlyList<FlowEventSnapshot> orderedEvents, DateTimeOffset now, Func<DateTimeOffset, decimal> valueAt)
+    {
+        if (orderedEvents.Count == 0) return [0m];
+        var windowStart = now - SparklineWindow;
+        var start = orderedEvents[0].OccurredAt > windowStart ? orderedEvents[0].OccurredAt : windowStart;
+        if (start >= now) return [Math.Round(valueAt(now), 2)];
+
+        var span = now - start;
+        var points = new decimal[SparklinePoints];
+        for (var i = 0; i < SparklinePoints; i++)
+        {
+            var t = start + (span * i / (SparklinePoints - 1));
+            points[i] = Math.Round(valueAt(t), 2);
+        }
+        return points;
     }
 
     public async Task<IReadOnlyList<AssetHoldingView>> GetAssetHoldingsAsync(CancellationToken ct)
     {
+        var now = DateTimeOffset.UtcNow;
         var states = await LoadAllAsync(ct);
-        return states.Select(BuildAssetHolding).OfType<AssetHoldingView>()
+        return states.Select(s => BuildAssetHolding(s, now)).OfType<AssetHoldingView>()
             .OrderByDescending(h => h.ValueUsd).ToList();
     }
 
@@ -159,6 +223,103 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             ScenarioProjection: ComputeProjection(modified),
             NetSeries: series,
             StreamImpacts: impacts);
+    }
+
+    // Recurring cash-flow streams with their calendar + expected-vs-actual (last complete month).
+    // Powers the Estable tab's expected-vs-real bullet chart and the recurrence calendar.
+    public async Task<IReadOnlyList<EstableStreamView>> GetEstableStreamsAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var now = DateTimeOffset.UtcNow;
+        var thisMonth = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var lastStart = thisMonth.AddMonths(-1);    // last complete month
+
+        var rows = new List<EstableStreamView>();
+        foreach (var s in states)
+        {
+            if (s.Direction == Direction.Performance) continue;
+            if (s.ExpectedAmount is null && s.Schedule is null) continue;
+
+            var cadence = s.Schedule?.Cadence ?? Cadence.Monthly;
+            var anchor = s.Schedule?.Anchor ?? 1;
+            var isFixed = s.Schedule?.Variability == Variability.Fixed;
+            var perMonth = cadence switch { Cadence.Weekly => 4.345m, Cadence.Biweekly => 2.17m, _ => 1m };
+            var expected = Math.Round((s.ExpectedAmount?.Amount ?? 0m) * perMonth, 2);
+            var actual = Math.Round(s.Events.Where(e => e.OccurredAt >= lastStart && e.OccurredAt < thisMonth).Sum(e => e.Amount.Amount), 2);
+
+            rows.Add(new EstableStreamView(s.Id, s.Name, s.Category, s.Direction, isFixed, cadence, anchor, expected, actual));
+        }
+        return rows
+            .OrderByDescending(r => r.Direction == Direction.Income)
+            .ThenByDescending(r => r.Expected)
+            .ToList();
+    }
+
+    // Portfolio market value vs invested capital (DCA), monthly. Empty if no asset holdings exist.
+    public async Task<PortfolioSeriesView> GetPortfolioSeriesAsync(
+        int months, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var assets = states.Where(s => s.Direction == Direction.Performance && s.Binding?.CapitalBasisUsd is not null).ToList();
+
+        var labels = new List<string>();
+        var value = new List<decimal>();
+        var capital = new List<decimal>();
+        if (assets.Count == 0) return new PortfolioSeriesView(labels, value, capital);
+
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        for (var i = months - 1; i >= 0; i--)
+        {
+            var mStart = anchor.AddMonths(-i);
+            var mEnd = mStart.AddMonths(1).AddTicks(-1);
+            labels.Add(mStart.ToString("MMM yy"));
+            value.Add(Math.Round(assets.Sum(a => a.Events.Where(e => e.OccurredAt <= mEnd).Sum(e => e.Amount.Amount)), 2));
+            capital.Add(Math.Round(assets.Sum(a => CapitalAt(a.Binding!, mEnd)), 2));
+        }
+        return new PortfolioSeriesView(labels, value, capital);
+    }
+
+    // Per-stream monthly series carrying Category + IsFixed, so the funnel dashboard can pivot by
+    // category and by predecible/variable on the client without extra round-trips. Cash flow only.
+    public async Task<IReadOnlyList<StreamSeriesPointView>> GetStreamSeriesAsync(
+        int months, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        return ComputeStreamSeries(states, months);
+    }
+
+    private static IReadOnlyList<StreamSeriesPointView> ComputeStreamSeries(IReadOnlyList<StreamGrainState> states, int months)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var floor = anchor.AddMonths(-(months - 1));
+
+        var output = new List<StreamSeriesPointView>();
+        foreach (var s in states)
+        {
+            if (s.Direction == Direction.Performance) continue; // funnel: cash flow only
+            var isFixed = s.Schedule?.Variability == Variability.Fixed;
+
+            var buckets = new SortedDictionary<(int Y, int M), decimal>();
+            for (var i = months - 1; i >= 0; i--)
+            {
+                var d = anchor.AddMonths(-i);
+                buckets[(d.Year, d.Month)] = 0m;
+            }
+            foreach (var e in s.Events)
+            {
+                if (e.OccurredAt < floor) continue;
+                var key = (e.OccurredAt.Year, e.OccurredAt.Month);
+                if (!buckets.ContainsKey(key)) continue;
+                buckets[key] += e.Amount.Amount;
+            }
+            foreach (var (key, amount) in buckets)
+                output.Add(new StreamSeriesPointView(
+                    key.Y, key.M, s.Id, s.Name, s.Category, s.Direction, isFixed, Math.Round(amount, 2)));
+        }
+        return output;
     }
 
     private static IReadOnlyList<MonthlyStreamPointView> ComputeMonthlyHistoryByStream(IReadOnlyList<StreamGrainState> states, int months)
@@ -650,6 +811,278 @@ public sealed class StreamAnalyticsService(IGrainFactory grains)
             });
         }
         return result;
+    }
+
+    // Net-worth trajectory: savings layer = opening + cumulative(income−outcome) − asset capital(T);
+    // assets layer = cumulative Performance value. Projection holds assets flat at the last value with a
+    // ±band from historical monthly price-return volatility (capital flows stripped out); savings continues on its recent trend.
+    internal static IReadOnlyList<CumulativeBalancePointView> ComputeNetWorthTrajectory(
+        IReadOnlyList<StreamGrainState> states, decimal openingBalance, int futureMonths, DateTimeOffset now)
+    {
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+
+        var allEvents = states.SelectMany(s => s.Events.Select(e => (s.Direction, e.OccurredAt, e.Amount.Amount))).ToList();
+        if (allEvents.Count == 0) return Array.Empty<CumulativeBalancePointView>();
+
+        var first = allEvents.Min(e => e.OccurredAt);
+        var firstMonth = new DateTimeOffset(first.Year, first.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var assetBindings = states.Where(s => s.Direction == Direction.Performance && s.Binding is not null)
+            .Select(s => s.Binding!).ToList();
+
+        decimal MonthFlow(DateTimeOffset mStart, Direction dir)
+        {
+            var mEnd = mStart.AddMonths(1);
+            return allEvents.Where(e => e.Direction == dir && e.OccurredAt >= mStart && e.OccurredAt < mEnd)
+                            .Sum(e => e.Amount);
+        }
+
+        var points = new List<CumulativeBalancePointView>();
+        decimal runIncome = 0, runOutcome = 0, runValue = 0;
+        var assetMonthlyPct = new List<decimal>();
+        decimal prevValue = 0;
+        decimal prevCapital = 0;
+
+        for (var m = firstMonth; m <= anchor; m = m.AddMonths(1))
+        {
+            runIncome += MonthFlow(m, Direction.Income);
+            runOutcome += MonthFlow(m, Direction.Outcome);
+            runValue += MonthFlow(m, Direction.Performance);
+            var capital = assetBindings.Sum(b => CapitalAt(b, m.AddMonths(1).AddTicks(-1)));
+
+            var savings = Math.Round(openingBalance + runIncome - runOutcome - capital, 2);
+            var assets = Math.Round(runValue, 2);
+            points.Add(new CumulativeBalancePointView(
+                m.ToString("MMM yy"), m, savings + assets, IsProjected: false, savings, assets));
+
+            // Volatility for the projection band is the PRICE return only — strip capital flows
+            // (deposits/withdrawals raise value AND capital) so buying more doesn't inflate sigma.
+            if (prevValue != 0)
+            {
+                var priceDelta = (runValue - prevValue) - (capital - prevCapital);
+                assetMonthlyPct.Add(priceDelta / prevValue);
+            }
+            prevValue = runValue;
+            prevCapital = capital;
+        }
+
+        if (futureMonths > 0 && points.Count > 0)
+        {
+            var window = points.TakeLast(Math.Min(7, points.Count)).ToList();
+            var savingsSlope = window.Count > 1 ? (window[^1].StableBalance - window[0].StableBalance) / (window.Count - 1) : 0m;
+            var lastSavings = points[^1].StableBalance;
+            var flatAssets = points[^1].VolatileBalance;
+            var sigmaMonthly = assetMonthlyPct.Count > 1 ? StdDev(assetMonthlyPct.ToArray()) : 0m;
+
+            for (var i = 1; i <= futureMonths; i++)
+            {
+                var d = anchor.AddMonths(i);
+                var savings = Math.Round(lastSavings + savingsSlope * i, 2);
+                var nw = savings + flatAssets;
+                var band = Math.Round(Math.Abs(flatAssets) * sigmaMonthly * (decimal)Math.Sqrt(i), 2);
+                points.Add(new CumulativeBalancePointView(
+                    d.ToString("MMM yy"), d, nw, IsProjected: true, savings, flatAssets,
+                    BandLow: Math.Round(nw - band, 2), BandHigh: Math.Round(nw + band, 2)));
+            }
+        }
+
+        return points;
+    }
+
+    public async Task<IReadOnlyList<CumulativeBalancePointView>> GetNetWorthTrajectoryAsync(
+        int futureMonths, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var opening = await grains.GetGrain<IOverviewSettingsGrain>(OverviewSettingsGrain.Key)
+            .GetOpeningBalanceAsync();
+        return ComputeNetWorthTrajectory(states, opening, futureMonths, DateTimeOffset.UtcNow);
+    }
+
+    internal static IReadOnlyList<YearOverYearView> ComputeYearOverYear(
+        IReadOnlyList<StreamGrainState> states, DateTimeOffset now)
+    {
+        var byYear = new SortedDictionary<int, decimal>();
+        foreach (var s in states)
+        {
+            if (s.Direction == Direction.Performance) continue; // cash flow only
+            var sign = s.Direction == Direction.Outcome ? -1m : 1m;
+            foreach (var e in s.Events)
+                byYear[e.OccurredAt.Year] = byYear.GetValueOrDefault(e.OccurredAt.Year) + sign * e.Amount.Amount;
+        }
+
+        var rows = new List<YearOverYearView>();
+        decimal? prev = null;
+        foreach (var (year, net) in byYear)
+        {
+            decimal? chg = prev is { } p && p != 0 ? Math.Round((net - p) / Math.Abs(p), 4) : null;
+            rows.Add(new YearOverYearView(year, Math.Round(net, 2), chg, IsPartial: year == now.Year));
+            prev = net;
+        }
+        return rows;
+    }
+
+    public async Task<IReadOnlyList<YearOverYearView>> GetYearOverYearAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null) =>
+        ComputeYearOverYear(ApplyFilter(await LoadAllAsync(ct), streamFilter), DateTimeOffset.UtcNow);
+
+    internal static IReadOnlyList<EarnSpendPointView> ComputeEarnSpend(
+        IReadOnlyList<StreamGrainState> states, EarnSpendGranularity grain, int periods, DateTimeOffset now)
+    {
+        DateTimeOffset StartOf(DateTimeOffset t) => grain switch
+        {
+            EarnSpendGranularity.Day   => new DateTimeOffset(t.Year, t.Month, t.Day, 0, 0, 0, TimeSpan.Zero),
+            EarnSpendGranularity.Week  => new DateTimeOffset(t.Year, t.Month, t.Day, 0, 0, 0, TimeSpan.Zero).AddDays(-(int)t.DayOfWeek),
+            EarnSpendGranularity.Month => new DateTimeOffset(t.Year, t.Month, 1, 0, 0, 0, TimeSpan.Zero),
+            _                          => new DateTimeOffset(t.Year, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        };
+        DateTimeOffset Advance(DateTimeOffset s, int n) => grain switch
+        {
+            EarnSpendGranularity.Day   => s.AddDays(n),
+            EarnSpendGranularity.Week  => s.AddDays(7 * n),
+            EarnSpendGranularity.Month => s.AddMonths(n),
+            _                          => s.AddYears(n),
+        };
+        string Label(DateTimeOffset s) => grain switch
+        {
+            EarnSpendGranularity.Day   => s.ToString("d MMM"),
+            EarnSpendGranularity.Week  => "w/" + s.ToString("d MMM"),
+            EarnSpendGranularity.Month => s.ToString("MMM yy"),
+            _                          => s.Year.ToString(),
+        };
+
+        var anchor = StartOf(now);
+        var buckets = new List<(DateTimeOffset Start, DateTimeOffset End)>();
+        for (var i = periods - 1; i >= 0; i--)
+        {
+            var start = Advance(anchor, -i);
+            buckets.Add((start, Advance(start, 1)));
+        }
+
+        return buckets.Select(b =>
+        {
+            decimal inc = 0, outc = 0;
+            foreach (var s in states)
+            {
+                if (s.Direction == Direction.Performance) continue;
+                foreach (var e in s.Events)
+                {
+                    if (e.OccurredAt < b.Start || e.OccurredAt >= b.End) continue;
+                    if (s.Direction == Direction.Income) inc += e.Amount.Amount;
+                    else outc += e.Amount.Amount;
+                }
+            }
+            return new EarnSpendPointView(Label(b.Start), b.Start, Math.Round(inc, 2), Math.Round(outc, 2));
+        }).ToList();
+    }
+
+    public async Task<IReadOnlyList<EarnSpendPointView>> GetEarnSpendAsync(
+        EarnSpendGranularity grain, int periods, CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null) =>
+        ComputeEarnSpend(ApplyFilter(await LoadAllAsync(ct), streamFilter), grain, periods, DateTimeOffset.UtcNow);
+
+    // "If you'd never spent": cumulative gross income (Income streams only) by month, from the first income to now.
+    internal static IReadOnlyList<TrajectoryPointView> ComputeGrossEarned(
+        IReadOnlyList<StreamGrainState> states, DateTimeOffset now)
+    {
+        var income = states.Where(s => s.Direction == Direction.Income)
+            .SelectMany(s => s.Events.Select(e => (e.OccurredAt, e.Amount.Amount))).ToList();
+        if (income.Count == 0) return Array.Empty<TrajectoryPointView>();
+
+        var first = income.Min(e => e.OccurredAt);
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var points = new List<TrajectoryPointView>();
+        decimal cum = 0;
+        for (var m = new DateTimeOffset(first.Year, first.Month, 1, 0, 0, 0, TimeSpan.Zero); m <= anchor; m = m.AddMonths(1))
+        {
+            var mEnd = m.AddMonths(1);
+            cum += income.Where(e => e.OccurredAt >= m && e.OccurredAt < mEnd).Sum(e => e.Amount);
+            points.Add(new TrajectoryPointView(m, Math.Round(cum, 2)));
+        }
+        return points;
+    }
+
+    // "What you really have": opening balance + cumulative (Income − Outcome), starting at the expense-tracking date
+    // (the only period where expenses are complete). Returns empty if no tracking date is set.
+    internal static IReadOnlyList<TrajectoryPointView> ComputeRealNetWorth(
+        IReadOnlyList<StreamGrainState> states, decimal openingBalance, DateTimeOffset? trackingStart, DateTimeOffset now)
+    {
+        if (trackingStart is not { } start) return Array.Empty<TrajectoryPointView>();
+
+        var flows = states.Where(s => s.Direction is Direction.Income or Direction.Outcome)
+            .SelectMany(s => s.Events.Select(e => (s.Direction, e.OccurredAt, e.Amount.Amount))).ToList();
+
+        var startMonth = new DateTimeOffset(start.Year, start.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        if (startMonth > anchor) return Array.Empty<TrajectoryPointView>();
+
+        var points = new List<TrajectoryPointView>();
+        decimal net = openingBalance;
+        for (var m = startMonth; m <= anchor; m = m.AddMonths(1))
+        {
+            var mEnd = m.AddMonths(1);
+            foreach (var f in flows.Where(e => e.OccurredAt >= m && e.OccurredAt < mEnd))
+                net += f.Direction == Direction.Income ? f.Amount : -f.Amount;
+            points.Add(new TrajectoryPointView(m, Math.Round(net, 2)));
+        }
+        return points;
+    }
+
+    // Projected gross earnings and net savings over each horizon, at the current monthly trend.
+    // Earnings trend = average monthly income over recent complete months; net trend = average monthly
+    // (Income − Outcome) over recent complete months from the expense-tracking date (where expenses are complete).
+    internal static IReadOnlyList<EarningsProjectionRowView> ComputeEarningsProjection(
+        IReadOnlyList<StreamGrainState> states, DateTimeOffset? trackingStart, DateTimeOffset now)
+    {
+        var flows = states.Where(s => s.Direction is Direction.Income or Direction.Outcome)
+            .SelectMany(s => s.Events.Select(e => (s.Direction, e.OccurredAt, e.Amount.Amount))).ToList();
+
+        // Average over the last 12 complete months (the current, partial month is excluded).
+        var anchor = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var windowStart = anchor.AddMonths(-12);
+        var trackMonth = trackingStart is { } s ? new DateTimeOffset(s.Year, s.Month, 1, 0, 0, 0, TimeSpan.Zero) : (DateTimeOffset?)null;
+
+        decimal incomeSum = 0, netSum = 0;
+        var netMonthCount = 0;
+        for (var m = windowStart; m < anchor; m = m.AddMonths(1))
+        {
+            var mEnd = m.AddMonths(1);
+            var inc = flows.Where(f => f.Direction == Direction.Income && f.OccurredAt >= m && f.OccurredAt < mEnd).Sum(f => f.Amount);
+            var outc = flows.Where(f => f.Direction == Direction.Outcome && f.OccurredAt >= m && f.OccurredAt < mEnd).Sum(f => f.Amount);
+            incomeSum += inc;
+            if (trackMonth is null || m >= trackMonth)
+            {
+                netSum += inc - outc;
+                netMonthCount++;
+            }
+        }
+
+        var avgIncome = incomeSum / 12m;
+        var avgNet = netMonthCount > 0 ? netSum / netMonthCount : 0m;
+
+        var horizons = new[] { ("6 months", 6), ("12 months", 12), ("3 years", 36), ("5 years", 60) };
+        return horizons.Select(h => new EarningsProjectionRowView(
+            h.Item1, h.Item2, Math.Round(avgIncome * h.Item2, 2), Math.Round(avgNet * h.Item2, 2))).ToList();
+    }
+
+    public async Task<IReadOnlyList<TrajectoryPointView>> GetGrossEarnedAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null) =>
+        ComputeGrossEarned(ApplyFilter(await LoadAllAsync(ct), streamFilter), DateTimeOffset.UtcNow);
+
+    public async Task<IReadOnlyList<TrajectoryPointView>> GetRealNetWorthAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var settings = grains.GetGrain<Grains.IOverviewSettingsGrain>(Grains.OverviewSettingsGrain.Key);
+        var opening = await settings.GetOpeningBalanceAsync();
+        var trackingStart = await settings.GetExpenseTrackingStartAsync();
+        return ComputeRealNetWorth(states, opening, trackingStart, DateTimeOffset.UtcNow);
+    }
+
+    public async Task<IReadOnlyList<EarningsProjectionRowView>> GetEarningsProjectionAsync(
+        CancellationToken ct, IReadOnlyCollection<Guid>? streamFilter = null)
+    {
+        var states = ApplyFilter(await LoadAllAsync(ct), streamFilter);
+        var trackingStart = await grains.GetGrain<Grains.IOverviewSettingsGrain>(Grains.OverviewSettingsGrain.Key)
+            .GetExpenseTrackingStartAsync();
+        return ComputeEarningsProjection(states, trackingStart, DateTimeOffset.UtcNow);
     }
 
     private async Task<IReadOnlyList<StreamGrainState>> LoadAllAsync(CancellationToken ct)

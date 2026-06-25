@@ -1,0 +1,55 @@
+@using ApexCharts
+@using Observa.Features.Streams.Services.Views
+
+<ApexChart TItem="TrajectoryPointView" Options="@_options" Height="260" Debug="false">
+    <ApexPointSeries TItem="TrajectoryPointView" Items="Points" Name="@Name"
+                     SeriesType="SeriesType.Area"
+                     XValue="@(p => (object)p.Date.ToUnixTimeMilliseconds())"
+                     YValue="@(p => p.Value)" />
+</ApexChart>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TrajectoryPointView> Points { get; set; } = [];
+    [Parameter] public string Name { get; set; } = "";
+    [Parameter] public string ColorHex { get; set; } = "#34d399";
+
+    private ApexChartOptions<TrajectoryPointView> _options = null!;
+
+    protected override void OnParametersSet()
+    {
+        _options = new ApexChartOptions<TrajectoryPointView>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                ForeColor = "#a1a1aa",
+                Toolbar = new Toolbar { Show = false },
+                Animations = new Animations { Enabled = true, Speed = 400 },
+                FontFamily = "ui-sans-serif, system-ui",
+                Zoom = new Zoom { Enabled = false },
+            },
+            Colors = new List<string> { ColorHex },
+            Stroke = new Stroke { Curve = new List<Curve> { Curve.Smooth }, Width = new List<double> { 2.5 } },
+            Fill = new Fill
+            {
+                Type = new List<FillType> { FillType.Gradient },
+                Gradient = new FillGradient { ShadeIntensity = 1, OpacityFrom = 0.35, OpacityTo = 0.03, Stops = new List<double> { 0, 100 } },
+            },
+            Markers = new Markers { Size = 0 },
+            Grid = new Grid { BorderColor = "#27272a", StrokeDashArray = 3 },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                AxisBorder = new AxisBorder { Color = "#27272a" },
+                Labels = new XAxisLabels { Rotate = 0, HideOverlappingLabels = true, Format = "MMM yy" },
+            },
+            Yaxis = new List<YAxis>
+            {
+                new() { Labels = new YAxisLabels { Formatter = "function(v){return '$'+Math.round(v).toLocaleString('en-US');}" } },
+            },
+            Tooltip = new Tooltip { Theme = Mode.Dark, Y = new TooltipY { Formatter = "function(v){return '$'+Math.round(v).toLocaleString('en-US');}" } },
+            Legend = new Legend { Show = false },
+            DataLabels = new DataLabels { Enabled = false },
+        };
+    }
+}

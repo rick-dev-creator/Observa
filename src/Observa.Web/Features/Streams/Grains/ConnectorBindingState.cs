@@ -11,6 +11,7 @@ public sealed class ConnectorBindingState
     [Id(2)] public DateTimeOffset? LastSync { get; set; }
     [Id(3)] public string? SnapshotState { get; set; }
     [Id(4)] public decimal? CapitalBasisUsd { get; set; }
+    [Id(5)] public List<CapitalPoint> CapitalHistory { get; set; } = new();
 
     public static ConnectorBindingState From(ConnectorBinding binding) => new()
     {
@@ -30,4 +31,11 @@ public sealed class ConnectorBindingState
         .Match(
             binding => binding,
             _ => throw new InvalidOperationException("Persisted ConnectorBinding state is invalid."));
+}
+
+[GenerateSerializer]
+public sealed class CapitalPoint
+{
+    [Id(0)] public DateTimeOffset At { get; set; }
+    [Id(1)] public decimal CapitalUsd { get; set; }
 }

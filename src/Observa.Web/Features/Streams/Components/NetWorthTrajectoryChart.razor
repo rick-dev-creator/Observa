@@ -1,0 +1,136 @@
+@using ApexCharts
+@using Observa.Features.Streams.Services.Views
+
+<div class="w-full">
+    <ApexChart TItem="CumulativeBalancePointView" Options="@_options" Height="300" Debug="false">
+        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Savings (cash)"
+                         SeriesType="SeriesType.Area"
+                         XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                         YValue="@(p => p.StableBalance)" />
+        <ApexPointSeries TItem="CumulativeBalancePointView" Items="Data" Name="Assets"
+                         SeriesType="SeriesType.Area"
+                         XValue="@(p => (object)p.Timestamp.ToUnixTimeMilliseconds())"
+                         YValue="@(p => p.VolatileBalance)" />
+    </ApexChart>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CumulativeBalancePointView> Data { get; set; } = [];
+    [Parameter] public DateTimeOffset? ExpenseTrackingStart { get; set; }
+    private ApexChartOptions<CumulativeBalancePointView> _options = null!;
+
+    protected override void OnParametersSet()
+    {
+        var lastHistorical = Data.LastOrDefault(p => !p.IsProjected);
+        var xAnnotations = new List<AnnotationsXAxis>();
+        if (lastHistorical is not null)
+            xAnnotations.Add(new AnnotationsXAxis
+            {
+                X = lastHistorical.Timestamp.ToUnixTimeMilliseconds(),
+                BorderColor = "#71717a",
+                StrokeDashArray = 5,
+                Label = new Label
+                {
+                    Text = "Today",
+                    BorderColor = "#71717a",
+                    Style = new Style { Background = "#27272a", Color = "#e4e4e7", FontSize = "11px" },
+                },
+            });
+
+        // Before expense tracking began, the savings layer is income-only (expenses untracked) and overstates
+        // net worth — shade and label that period so it reads as "what you'd have if you spent nothing", not real savings.
+        var firstPoint = Data.FirstOrDefault();
+        if (ExpenseTrackingStart is { } track && firstPoint is not null && firstPoint.Timestamp < track)
+        {
+            xAnnotations.Add(new AnnotationsXAxis
+            {
+                X = firstPoint.Timestamp.ToUnixTimeMilliseconds(),
+                X2 = track.ToUnixTimeMilliseconds(),
+                FillColor = "#a1a1aa",
+                Opacity = 0.06,
+                Label = new Label
+                {
+                    Text = "Income only · expenses untracked",
+                    BorderColor = "transparent",
+                    Style = new Style { Background = "#27272a", Color = "#a1a1aa", FontSize = "10px" },
+                },
+            });
+            xAnnotations.Add(new AnnotationsXAxis
+            {
+                X = track.ToUnixTimeMilliseconds(),
+                BorderColor = "#d97706",
+                StrokeDashArray = 4,
+                Label = new Label
+                {
+                    Text = "Full tracking",
+                    BorderColor = "#d97706",
+                    Style = new Style { Background = "#27272a", Color = "#fbbf24", FontSize = "11px" },
+                },
+            });
+        }
+
+        _options = new ApexChartOptions<CumulativeBalancePointView>
+        {
+            Chart = new Chart
+            {
+                Background = "transparent",
+                ForeColor = "#a1a1aa",
+                Toolbar = new Toolbar { Show = false },
+                Animations = new Animations { Enabled = true, Speed = 400 },
+                FontFamily = "ui-sans-serif, system-ui",
+                Zoom = new Zoom { Enabled = false },
+                Stacked = true,
+            },
+            Colors = new List<string> { "#38bdf8", "#34d399" },
+            Stroke = new Stroke
+            {
+                Curve = new List<Curve> { Curve.Smooth, Curve.Smooth },
+                Width = new List<double> { 2.5, 2.5 },
+            },
+            Fill = new Fill
+            {
+                Type = new List<FillType> { FillType.Gradient, FillType.Gradient },
+                Gradient = new FillGradient
+                {
+                    ShadeIntensity = 1,
+                    OpacityFrom = 0.4,
+                    OpacityTo = 0.05,
+                    Stops = new List<double> { 0, 100 },
+                },
+            },
+            Markers = new Markers { Size = 0 },
+            Grid = new Grid { BorderColor = "#27272a", StrokeDashArray = 3 },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                AxisBorder = new AxisBorder { Color = "#27272a" },
+                Labels = new XAxisLabels
+                {
+                    Rotate = 0,
+                    HideOverlappingLabels = true,
+                    Format = "MMM yy",
+                },
+            },
+            Yaxis = new List<YAxis>
+            {
+                new()
+                {
+                    Labels = new YAxisLabels
+                    {
+                        Formatter = "function(v){return '$'+Math.round(v).toLocaleString('en-US');}",
+                    },
+                },
+            },
+            Tooltip = new Tooltip
+            {
+                Theme = Mode.Dark,
+                Shared = true,
+                Intersect = false,
+                Y = new TooltipY { Formatter = "function(v){return '$'+Math.round(v).toLocaleString('en-US');}" },
+            },
+            Legend = new Legend { Show = true, Position = LegendPosition.Top, HorizontalAlign = Align.Left },
+            DataLabels = new DataLabels { Enabled = false },
+            Annotations = xAnnotations.Count > 0 ? new Annotations { Xaxis = xAnnotations } : null,
+        };
+    }
+}

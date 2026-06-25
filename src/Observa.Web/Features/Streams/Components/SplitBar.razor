@@ -1,0 +1,45 @@
+@using System.Text
+@using System.Globalization
+
+@* Single horizontal bar split into proportional segments (e.g. predecible vs variable). *@
+<svg viewBox="0 0 @VbW 64" class="w-full h-auto" style="overflow:visible" role="img" aria-label="Split bar">
+    @((MarkupString)_svg)
+</svg>
+
+@code {
+    public sealed record Seg(string Label, string Color, decimal Amount);
+
+    [Parameter, EditorRequired] public IReadOnlyList<Seg> Segments { get; set; } = [];
+    [Parameter] public int VbW { get; set; } = 1020;
+
+    private string _svg = "";
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+    private static string F(double x) => x.ToString("0.#", Ci);
+    private static string Fmt(decimal v) => "$" + Math.Round(v).ToString("N0", Ci);
+
+    protected override void OnParametersSet() => _svg = Build();
+
+    private string Build()
+    {
+        var total = (double)Segments.Sum(s => s.Amount);
+        if (total <= 0) return "";
+        double X0 = 2, X1 = VbW - 2, h = 26, y = 8;
+        var sb = new StringBuilder();
+        var x = X0;
+        foreach (var s in Segments)
+        {
+            var w = (double)s.Amount / total * (X1 - X0);
+            sb.Append($"<rect x='{F(x)}' y='{y}' width='{F(Math.Max(0, w))}' height='{h}' rx='4' fill='{s.Color}' opacity='0.9'/>");
+            if (w > 96)
+            {
+                var pct = Math.Round(s.Amount / (decimal)total * 100).ToString(Ci);
+                sb.Append($"<text x='{F(x + 12)}' y='{F(y + 17)}' font-size='13' font-weight='650' fill='#0d0f12'>{Esc(s.Label)}</text>");
+                sb.Append($"<text x='{F(x + w - 12)}' y='{F(y + 17)}' text-anchor='end' font-size='12' fill='#0d0f12cc'>{Fmt(s.Amount)} · {pct}%</text>");
+            }
+            x += w;
+        }
+        return sb.ToString();
+    }
+
+    private static string Esc(string s) => s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+}

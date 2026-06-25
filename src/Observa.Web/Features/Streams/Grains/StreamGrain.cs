@@ -1,6 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Observa.Connectors.Abstractions;
 using Observa.Features.Connectors.Orchestration;
+using Observa.Features.Connectors.Registry;
+using Observa.Features.Streams.Enums;
 using Orleans.Runtime;
 
 namespace Observa.Features.Streams.Grains;
@@ -11,6 +14,51 @@ public sealed class StreamGrain(
     : Grain, IStreamGrain, IRemindable
 {
     private const string ConnectorPollReminderName = "connector-poll";
+
+    public override async Task OnActivateAsync(CancellationToken cancellationToken)
+    {
+        await base.OnActivateAsync(cancellationToken);
+
+        // Re-register the poll reminder from the connector's *current* configured interval.
+        // Orleans persists the reminder period, so a config change (e.g. fixing a poll interval)
+        // would otherwise never take effect for already-registered streams. Re-ensuring here means
+        // the interval is corrected the next time the grain activates (dashboard view, restart, …).
+        if (state.State.Status == StreamStatus.Active && state.State.Binding is { } binding)
+        {
+            var connector = ServiceProvider.GetRequiredService<IConnectorRegistry>()
+                .Find(new ConnectorId(binding.ConnectorId));
+            if (connector is { Metadata.PollInterval: var pi } && pi > TimeSpan.Zero)
+            {
+                await EnsureConnectorPollReminderAsync(pi);
+
+                // Catch-up poll: if a full interval has elapsed since the last poll (a restart, downtime,
+                // or a just-corrected poll interval), poll now instead of waiting a whole interval for the
+                // reminder's first tick. A healthy stream polls every interval, so its LastConnectorPollAt
+                // stays fresh and routine reactivations do NOT trigger an extra poll.
+                var last = state.State.LastConnectorPollAt;
+                if (last is null || DateTimeOffset.UtcNow - last.Value >= pi)
+                    KickOffPoll();
+            }
+        }
+    }
+
+    private void KickOffPoll()
+    {
+        var streamId = this.GetPrimaryKey();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var orchestrator = ServiceProvider.GetRequiredService<ConnectorPollOrchestrator>();
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                await orchestrator.PollAsync(streamId, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Catch-up connector poll failed for stream {StreamId}.", streamId);
+            }
+        });
+    }
 
     public Task<StreamGrainState> GetAsync() => Task.FromResult(state.State);
 
@@ -24,6 +72,10 @@ public sealed class StreamGrain(
             newState.Binding.SnapshotState = state.State.Binding.SnapshotState;
         if (newState.Binding is not null && newState.Binding.CapitalBasisUsd is null && state.State.Binding?.CapitalBasisUsd is not null)
             newState.Binding.CapitalBasisUsd = state.State.Binding.CapitalBasisUsd;
+        if (newState.Binding is not null
+            && newState.Binding.CapitalHistory.Count == 0
+            && state.State.Binding?.CapitalHistory is { Count: > 0 } existing)
+            newState.Binding.CapitalHistory = existing;
         state.State = newState;
 
         if (logEntry is not null)
@@ -49,6 +101,17 @@ public sealed class StreamGrain(
         if (state.State.Binding is null) return;
         state.State.Binding.SnapshotState = snapshotState;
         state.State.Binding.CapitalBasisUsd = capitalBasisUsd;
+        // Only record a history point when the connector reports a capital figure.
+        if (capitalBasisUsd is { } cap)
+        {
+            var hist = state.State.Binding.CapitalHistory;
+            // Coalesce: replace the last point if it is from the same day, else append.
+            var now = DateTimeOffset.UtcNow;
+            if (hist.Count > 0 && hist[^1].At.Date == now.Date)
+                hist[^1] = new CapitalPoint { At = now, CapitalUsd = cap };
+            else
+                hist.Add(new CapitalPoint { At = now, CapitalUsd = cap });
+        }
         await state.WriteStateAsync();
     }
 
@@ -68,7 +131,6 @@ public sealed class StreamGrain(
     public async Task ReceiveReminder(string reminderName, TickStatus status)
     {
         if (reminderName != ConnectorPollReminderName) return;
-        var streamId = this.GetPrimaryKey();
         var now = DateTimeOffset.UtcNow;
 
         // LastConnectorPollAt is owned by the poll path (orchestrator → MarkPolledAsync),
@@ -81,18 +143,6 @@ public sealed class StreamGrain(
         });
         await state.WriteStateAsync();
 
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var orchestrator = ServiceProvider.GetRequiredService<ConnectorPollOrchestrator>();
-                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-                await orchestrator.PollAsync(streamId, cts.Token);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Connector poll failed for stream {StreamId}.", streamId);
-            }
-        });
+        KickOffPoll();
     }
 }
